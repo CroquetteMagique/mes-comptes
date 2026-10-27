@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>Mes Comptes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="static/css/style.css?v={{ version }}">
+  <link rel="icon" href="static/icones/icone-192.png">
+  <link rel="apple-touch-icon" href="static/icones/icone-180.png">
+  <meta name="theme-color" content="#050505">
+{% if mode_local %}
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Mes Comptes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+{% endif %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- Icônes (réutilisées via <use href="#i-…">) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-in" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  </svg>
+
+  <!-- ══════════ SIDEBAR ══════════ -->
+  <aside class="sidebar">
+    <div class="logo">
+      <span class="logo-mark" aria-hidden="true">€</span>
+      <button class="logo-text" id="logo-prenom" onclick="changerPrenom()" title="Modifier le prénom">Mes Comptes</button>
+    </div>
+
+    <nav aria-label="Sections">
+      <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard', this)">
+        <svg class="nav-icon" aria-hidden="true"><use href="#i-home"/></svg>
+        <span class="nav-text" data-short="Accueil">Tableau de bord</span>
+      </button>
+      <button class="nav-btn" data-tab="depenses" onclick="showTab('depenses', this)">
+        <svg class="nav-icon" aria-hidden="true"><use href="#i-out"/></svg>
+        <span class="nav-text" data-short="Dépenses">Dépenses</span>
+      </button>
+      <button class="nav-btn" data-tab="revenus" onclick="showTab('revenus', this)">
+        <svg class="nav-icon" aria-hidden="true"><use href="#i-in"/></svg>
+        <span class="nav-text" data-short="Revenus">Revenus</span>
+      </button>
+      <button class="nav-btn" data-tab="remboursements" onclick="showTab('remboursements', this)">
+        <svg class="nav-icon" aria-hidden="true"><use href="#i-back"/></svg>
+        <span class="nav-text" data-short="Rembours.">Remboursements</span>
+      </button>
+      {% include "perso/nav.html" ignore missing %}
+    </nav>
+
+    <div class="mois-selector">
+      <label class="mois-label" for="moisSelect">Mois affiché</label>
+      <div class="mois-row">
+        <select id="moisSelect" onchange="onMoisChange()"></select>
+        <button class="btn-add-mois" onclick="addMois()" title="Ajouter un mois" aria-label="Ajouter un mois">
+          <svg aria-hidden="true"><use href="#i-plus"/></svg>
+        </button>
+      </div>
+      <div class="liens-local">
+        <button class="lien-notes" onclick="sauvegarderDonnees()">Sauvegarder mes données</button>
+        <button class="lien-notes" onclick="restaurerDonnees()">Restaurer une sauvegarde</button>
+      </div>
+      <button class="lien-notes" onclick="ouvrirNotes()">Nouveautés <span id="version-app"></span></button>
+    </div>
+  </aside>
+
+  <!-- ══════════ CONTENT ══════════ -->
+  <main class="content">
+
+    <!-- ── DASHBOARD ── -->
+    <section id="tab-dashboard" class="tab active">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title" id="db-mois-title">—</h1>
+          <p class="page-subtitle">Où en est votre argent ce mois-ci</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-primary" onclick="openDictee()">
+            <svg aria-hidden="true"><use href="#i-mic"/></svg> Dicter des dépenses <span class="beta" title="Fonction en test">Bêta</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="hero">
+        <!-- Le chiffre principal : modifiable à la main, recalculé ensuite tout seul -->
+        <label class="avoirs" for="db-avoirs">
+          <span class="avoirs-label">Mes avoirs aujourd'hui</span>
+          <span class="avoirs-field">
+            <input type="number" id="db-avoirs" class="avoirs-input" step="0.01"
+                   placeholder="0,00" onchange="saveAvoirs()">
+            <span class="avoirs-currency">€</span>
+          </span>
+          <span class="avoirs-hint">
+            <svg aria-hidden="true"><use href="#i-pencil"/></svg>
+            Cliquez sur le montant pour le corriger. Il suit ensuite chaque dépense et chaque revenu.
+          </span>
+        </label>
+
+        <div class="month-panel">
+          <h2 class="panel-title">Ce mois-ci</h2>
+          <div class="month-row">
+            <span>Revenus</span>
+            <strong class="pos" id="db-revenus">—</strong>
+          </div>
+          <div class="month-row">
+            <span>Dépenses</span>
+            <strong class="neg" id="db-depenses">—</strong>
+          </div>
+          <div class="card" id="db-bilan-card">
+            <span>Bilan</span>
+            <strong class="card-value" id="db-bilan">—</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">Charges fixes</span>
+          <span class="stat-value" id="db-fixes">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Dépenses variables</span>
+          <span class="stat-value" id="db-variables">—</span>
+        </div>
+        <div class="stat stat--wait">
+          <span class="stat-label">À me faire rembourser</span>
+          <span class="stat-value" id="db-remboursements">—</span>
+        </div>
+        <div class="stat stat--forecast">
+          <span class="stat-label">Fin de mois estimée</span>
+          <span class="stat-value" id="db-prevision">—</span>
+          <span class="stat-sub" id="db-prevision-sub"></span>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <h2 class="section-title">Budgets du mois</h2>
+        <button class="btn-secondary" onclick="openBudgets()">Gérer les budgets</button>
+      </div>
+      <div class="budgets" id="db-budgets"></div>
+
+      <div class="charts-grid">
+        <figure class="chart-card chart-card--wide">
+          <figcaption class="chart-title">Dépenses et revenus par mois</figcaption>
+          <div class="chart-wrap"><canvas id="chart-mensuel"></canvas></div>
+        </figure>
+        <figure class="chart-card">
+          <figcaption class="chart-title">Où part l'argent</figcaption>
+          <div class="chart-wrap"><canvas id="chart-categories"></canvas></div>
+        </figure>
+        <figure class="chart-card">
+          <figcaption class="chart-title">Remboursements par mois</figcaption>
+          <div class="chart-wrap"><canvas id="chart-remboursements"></canvas></div>
+        </figure>
+      </div>
+
+      <h2 class="section-title">Dernières dépenses du mois</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Élément</th>
+              <th>Catégorie</th>
+              <th>Date</th>
+              <th class="num">Montant</th>
+            </tr>
+          </thead>
+          <tbody id="db-recent"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── DÉPENSES ── -->
+    <section id="tab-depenses" class="tab">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title">Dépenses</h1>
+          <p class="page-subtitle" id="dep-mois-sub">—</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-pdf" onclick="downloadPDF()">
+            <svg aria-hidden="true"><use href="#i-download"/></svg> Exporter en PDF
+          </button>
+          <button class="btn-pdf" onclick="telecharger('/api/export/csv')">
+            <svg aria-hidden="true"><use href="#i-table"/></svg> Exporter pour Excel
+          </button>
+        </div>
+      </header>
+
+      <div class="search-bar">
+        <label class="search-field">
+          <svg aria-hidden="true"><use href="#i-search"/></svg>
+          <span class="sr-only">Rechercher une dépense</span>
+          <input type="search" id="search-q" placeholder="Rechercher une dépense ou une personne, tous mois confondus" oninput="onSearch()">
+        </label>
+        <select id="search-type" onchange="onSearch()" aria-label="Filtrer par type">
+          <option value="">Tous les types</option>
+        </select>
+      </div>
+
+      <div id="search-results" hidden>
+        <div class="toolbar">
+          <h2 class="section-title" id="search-title">Résultats</h2>
+          <button class="btn-secondary" onclick="clearSearch()">
+            <svg aria-hidden="true"><use href="#i-x"/></svg> Effacer la recherche
+          </button>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Élément</th><th>Mois</th><th>Date</th><th class="num">Montant</th><th class="actions-col"><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="list-recherche"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="dep-mois-view">
+
+      <div class="totaux-bar">
+        <div class="totaux-item">
+          <span class="totaux-label">Charges fixes</span>
+          <span class="totaux-value" id="total-fixes">—</span>
+        </div>
+        <div class="totaux-item">
+          <span class="totaux-label">Variables</span>
+          <span class="totaux-value" id="total-variables">—</span>
+        </div>
+        <div class="totaux-item totaux-item--total">
+          <span class="totaux-label">Total du mois</span>
+          <span class="totaux-value" id="total-dep-all">—</span>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <h2 class="section-title">Dépenses du mois</h2>
+        <div class="header-actions">
+          <button class="btn-secondary" onclick="openDictee()">
+            <svg aria-hidden="true"><use href="#i-mic"/></svg> Dicter <span class="beta" title="Fonction en test">Bêta</span>
+          </button>
+          <button class="btn-primary" onclick="openModalDep('variable')">
+            <svg aria-hidden="true"><use href="#i-plus"/></svg> Ajouter une dépense
+          </button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Élément</th><th>Date</th><th class="num">Montant</th><th>Remboursement</th><th class="actions-col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody id="list-variable"></tbody>
+        </table>
+      </div>
+
+      <div class="toolbar">
+        <h2 class="section-title">Charges fixes <span class="section-note">recopiées chaque mois</span></h2>
+        <button class="btn-secondary" onclick="openModalDep('fixe')">
+          <svg aria-hidden="true"><use href="#i-plus"/></svg> Ajouter une charge fixe
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Élément</th><th>Échéance</th><th class="num">Montant</th><th class="actions-col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody id="list-fixe"></tbody>
+        </table>
+      </div>
+      </div>
+    </section>
+
+    <!-- ── REVENUS ── -->
+    <section id="tab-revenus" class="tab">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title">Revenus</h1>
+          <p class="page-subtitle" id="rev-mois-sub">—</p>
+        </div>
+      </header>
+
+      <div class="totaux-bar">
+        <div class="totaux-item totaux-item--total totaux-item--in">
+          <span class="totaux-label">Reçu ce mois-ci</span>
+          <span class="totaux-value" id="total-revenus-bar">—</span>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <h2 class="section-title">Entrées d'argent</h2>
+        <button class="btn-primary" onclick="openModal('modal-revenu')">
+          <svg aria-hidden="true"><use href="#i-plus"/></svg> Ajouter un revenu
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Élément</th><th>Date</th><th class="num">Montant</th><th class="actions-col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody id="list-revenus"></tbody>
+        </table>
+      </div>
+      <div class="total-bar">Total des revenus <strong id="total-revenus">0,00 €</strong></div>
+    </section>
+
+    <!-- ── REMBOURSEMENTS ── -->
+    <section id="tab-remboursements" class="tab">
+      <header class="page-header">
+        <div>
+          <h1 class="page-title">Remboursements</h1>
+          <p class="page-subtitle">L'argent avancé pour d'autres, à récupérer</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-pdf" onclick="downloadPDFRemboursements()">
+            <svg aria-hidden="true"><use href="#i-download"/></svg> Exporter en PDF
+          </button>
+          <button class="btn-pdf btn-pdf--share" onclick="sharePDFRemboursements()">
+            <svg aria-hidden="true"><use href="#i-share"/></svg> Envoyer par WhatsApp
+          </button>
+        </div>
+      </header>
+
+      <div class="totaux-bar">
+        <div class="totaux-item totaux-item--wait">
+          <span class="totaux-label">En attente</span>
+          <span class="totaux-value" id="rembours-attente">—</span>
+        </div>
+        <div class="totaux-item totaux-item--in">
+          <span class="totaux-label">Déjà remboursé</span>
+          <span class="totaux-value" id="rembours-recu">—</span>
+        </div>
+        <div class="totaux-item totaux-item--total">
+          <span class="totaux-label">Total avancé</span>
+          <span class="totaux-value" id="rembours-total">—</span>
+        </div>
+      </div>
+
+      <div class="rembours-bar">
+        <div class="rembours-filters" role="group" aria-label="Filtrer les remboursements">
+          <button class="filter-btn active" onclick="filterRembours('tous', this)">Tous</button>
+          <button class="filter-btn" onclick="filterRembours('attente', this)">En attente</button>
+          <button class="filter-btn" onclick="filterRembours('recu', this)">Remboursés</button>
+        </div>
+        <select id="rembours-personne" onchange="renderRemboursements()" aria-label="Personne qui doit rembourser">
+          <option value="">Toutes les personnes</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Élément</th>
+              <th>Date</th>
+              <th class="num">Montant</th>
+              <th>Statut</th>
+              <th class="actions-col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="list-remboursements"></tbody>
+        </table>
+      </div>
+    </section>
+
+    {% include "perso/sections.html" ignore missing %}
+
+  </main>
+
+  <!-- ══════════ MODAL DÉPENSE ══════════ -->
+  <div class="modal-overlay" id="modal-depense">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-dep-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-dep-title">Nouvelle dépense</h2>
+        <p class="modal-sub" id="modal-dep-sub">Renseignez les informations ci-dessous</p>
+      </div>
+      <input type="hidden" id="dep-edit-id">
+      <input type="hidden" id="dep-cat-forced">
+
+      <div class="form-group form-group--amount">
+        <label for="dep-montant">Montant</label>
+        <div class="amount-field">
+          <input type="number" id="dep-montant" step="0.01" placeholder="0,00" inputmode="decimal">
+          <span>€</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="dep-element">Élément</label>
+        <input type="text" id="dep-element" placeholder="Ex : Intermarché, Netflix…"
+               list="suggestions-list" autocomplete="off">
+        <datalist id="suggestions-list"></datalist>
+      </div>
+      <div class="form-group">
+        <span class="label">Type de dépense</span>
+        <div class="type-grid" id="type-grid">
+          <button type="button" class="type-btn" data-type="nourriture" onclick="selectType('nourriture', this)">🛒 Nourriture</button>
+          <button type="button" class="type-btn" data-type="restaurant" onclick="selectType('restaurant', this)">🍽️ Restaurant</button>
+          <button type="button" class="type-btn" data-type="sport"      onclick="selectType('sport', this)">⚽ Sport</button>
+          <button type="button" class="type-btn" data-type="jeux"       onclick="selectType('jeux', this)">🎮 Jeux</button>
+          <button type="button" class="type-btn" data-type="cadeaux"    onclick="selectType('cadeaux', this)">🎁 Cadeaux</button>
+          <button type="button" class="type-btn" data-type="transport"  onclick="selectType('transport', this)">🚆 Transport</button>
+          <button type="button" class="type-btn" data-type="logement"   onclick="selectType('logement', this)">🏠 Logement</button>
+          <button type="button" class="type-btn" data-type="sante"      onclick="selectType('sante', this)">💊 Santé</button>
+          <button type="button" class="type-btn" data-type="vetements"  onclick="selectType('vetements', this)">👕 Vêtements</button>
+          <button type="button" class="type-btn" data-type="voyage"     onclick="selectType('voyage', this)">✈️ Voyage</button>
+          <button type="button" class="type-btn" data-type="soiree"     onclick="selectType('soiree', this)">🍻 Soirée</button>
+          <button type="button" class="type-btn" data-type="abonnement" onclick="selectType('abonnement', this)">📱 Abonnement</button>
+          <button type="button" class="type-btn" data-type="etudes"     onclick="selectType('etudes', this)">📚 Études</button>
+          <button type="button" class="type-btn" data-type="culture"    onclick="selectType('culture', this)">🎭 Culture</button>
+          <button type="button" class="type-btn" data-type="autre"      onclick="selectType('autre', this)">• Autre</button>
+        </div>
+        <input type="hidden" id="dep-type">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" id="form-group-categorie">
+          <label for="dep-categorie">Catégorie</label>
+          <select id="dep-categorie">
+            <option value="fixe">Charge fixe</option>
+            <option value="variable" selected>Variable</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="dep-date">Date</label>
+          <input type="date" id="dep-date">
+        </div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="dep-rembours" onchange="togglePersonne()">
+        <span class="switch-track" aria-hidden="true"></span>
+        <span>Quelqu'un doit me rembourser cette dépense</span>
+      </label>
+      <div class="form-group form-group--personne" id="fg-personne" hidden>
+        <label for="dep-personne">Qui doit vous rembourser ?</label>
+        <input type="text" id="dep-personne" list="personnes-list" placeholder="Ex : un parent, un colocataire…" autocomplete="off">
+        <datalist id="personnes-list"></datalist>
+      </div>
+      <p class="form-error" id="dep-error" role="alert"></p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-depense')">Annuler</button>
+        <button class="btn-primary" onclick="saveDepense()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ MODAL REVENU ══════════ -->
+  <div class="modal-overlay" id="modal-revenu">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-rev-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-rev-title">Nouveau revenu</h2>
+        <p class="modal-sub">Ajoutez une entrée d'argent</p>
+      </div>
+      <div class="form-group form-group--amount">
+        <label for="rev-montant">Montant</label>
+        <div class="amount-field amount-field--in">
+          <input type="number" id="rev-montant" step="0.01" placeholder="0,00" inputmode="decimal">
+          <span>€</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="rev-element">Élément</label>
+        <input type="text" id="rev-element" placeholder="Ex : Salaire, virement…" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="rev-date">Date</label>
+        <input type="date" id="rev-date">
+      </div>
+      <p class="form-error" id="rev-error" role="alert"></p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-revenu')">Annuler</button>
+        <button class="btn-primary" onclick="saveRevenu()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ MODAL DICTÉE ══════════ -->
+  <div class="modal-overlay" id="modal-dictee">
+    <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="dictee-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="dictee-title">Dicter des dépenses <span class="beta beta--title">Bêta</span></h2>
+        <p class="modal-sub">Dites par exemple : « 4 septembre, Carrefour, 45 euros 20. Le 6, machine à laver, 3 euros. »</p>
+      </div>
+
+      <div id="dictee-etape1">
+        <div class="mic-zone">
+          <button type="button" class="mic-btn" id="dictee-mic" onclick="toggleMicro()" aria-pressed="false">
+            <svg aria-hidden="true"><use href="#i-mic"/></svg>
+            <span class="sr-only">Démarrer ou arrêter la dictée</span>
+          </button>
+          <p class="mic-status" id="dictee-status" aria-live="polite">Appuyez sur le micro et parlez. Appuyez à nouveau pour arrêter.</p>
+        </div>
+        <div class="form-group">
+          <label for="dictee-texte">Texte compris (modifiable, vous pouvez aussi taper ou coller)</label>
+          <textarea id="dictee-texte" rows="5" placeholder="Le texte dicté s'affiche ici…"></textarea>
+        </div>
+        <p class="form-hint">Le micro marche dans Chrome, Edge et Safari et demande une connexion internet. Dans Opera ou Firefox, utilisez la dictée du système : Windows + H, ou deux fois Fn sur Mac. L'analyse du texte se fait sur votre ordinateur.</p>
+        <p class="form-error" id="dictee-error" role="alert"></p>
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="closeModal('modal-dictee')">Annuler</button>
+          <button class="btn-primary" onclick="analyserDictee()">Analyser le texte</button>
+        </div>
+      </div>
+
+      <div id="dictee-etape2" hidden>
+        <p class="dictee-resume" id="dictee-resume"></p>
+        <div class="dictee-liste" id="dictee-liste"></div>
+        <p class="form-hint" id="dictee-noncompris"></p>
+        <p class="form-error" id="dictee-error2" role="alert"></p>
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="dicteeRetour()">Revenir au texte</button>
+          <button class="btn-primary" id="dictee-save" onclick="enregistrerDictee()">Tout enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ MODAL BUDGETS ══════════ -->
+  <div class="modal-overlay" id="modal-budgets">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="budgets-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="budgets-title">Budgets mensuels</h2>
+        <p class="modal-sub">Un plafond par catégorie. Laissez vide pour ne pas suivre une catégorie.</p>
+      </div>
+      <div class="budget-form" id="budget-form"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-budgets')">Annuler</button>
+        <button class="btn-primary" onclick="saveBudgets()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ DIALOGUE GÉNÉRIQUE (remplace prompt/confirm) ══════════ -->
+  <div class="modal-overlay" id="modal-dialog">
+    <div class="modal modal--small" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="dialog-title"></h2>
+        <p class="modal-sub" id="dialog-text"></p>
+      </div>
+      <div class="form-group" id="dialog-field" hidden>
+        <input id="dialog-input" aria-labelledby="dialog-title">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="dialog-cancel">Annuler</button>
+        <button class="btn-primary" id="dialog-ok">Valider</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ NOTES DE VERSION ══════════ -->
+  <div class="modal-overlay" id="modal-notes">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="notes-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="notes-title">Nouveautés</h2>
+        <p class="modal-sub" id="notes-sub"></p>
+      </div>
+      <div class="notes-liste" id="notes-liste"></div>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="fermerNotes()">Compris</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span id="toast-text"></span>
+    <button class="toast-action" id="toast-action" hidden></button>
+  </div>
+
+{% if mode_local %}
+  <!-- Version navigateur : pas de serveur, les données restent sur cet appareil -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="static/js/dictee.js?v={{ version }}"></script>
+  <script src="static/js/local-api.js?v={{ version }}"></script>
+{% endif %}
+  <script src="static/js/app.js?v={{ version }}"></script>
+</body>
+</html>

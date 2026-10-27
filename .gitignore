@@ -1,0 +1,41 @@
+# Base de données (chacun garde ses propres données)
+comptes.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environnements virtuels
+venv/
+.venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+/tmp/
+
+# Parties perso, jamais publiées
+templates/perso/
+
+# Sauvegardes quotidiennes de la base
+sauvegardes/
+
+# Tests locaux (données inventées, non publiés)
+test_app.py
+
+# Tous les tests locaux (phrases et données inventées)
+test_*.py
+
+# Version navigateur construite (générée par GitHub)
+_site/

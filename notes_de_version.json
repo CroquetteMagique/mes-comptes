@@ -1,0 +1,20 @@
+[
+  {
+    "id": "2026-10-27.2",
+    "titre": "Version navigateur, sans installation",
+    "points": [
+      "L'appli peut maintenant s'utiliser directement dans Safari, Chrome ou Edge, sans rien installer : les données restent sur l'appareil.",
+      "Dans cette version, « Sauvegarder mes données » (en bas à gauche) crée un fichier de sauvegarde à garder en lieu sûr, et « Restaurer une sauvegarde » le recharge.",
+      "Les exports PDF et Excel se téléchargent directement."
+    ]
+  },
+  {
+    "id": "2026-10-27.1",
+    "titre": "Mises à jour automatiques",
+    "points": [
+      "L'appli se met à jour toute seule à chaque lancement quand une nouvelle version est disponible. Vos données ne sont jamais touchées, et une copie de la base est faite avant chaque mise à jour.",
+      "Cette fenêtre vous présente les nouveautés après chaque mise à jour. Vous pouvez la rouvrir avec « Nouveautés » en bas à gauche.",
+      "Dictée vocale améliorée : la date peut être dite avant ou après le prix, « 1er », « sept. », « j'ai payé … chez … » et « X doit me rembourser » sont compris."
+    ]
+  }
+]

@@ -1,0 +1,40 @@
+# Met en ligne la version navigateur (GitHub Pages) à chaque push sur main.
+name: Version navigateur
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install jinja2
+      - name: Vérifier la syntaxe
+        run: |
+          python -m py_compile app.py dictee.py mise_a_jour.py outils/construire_site.py
+          node --check static/js/app.js && node --check static/js/local-api.js && node --check static/js/dictee.js
+      - run: python outils/construire_site.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploiement
+        uses: actions/deploy-pages@v4
