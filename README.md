@@ -1,21 +1,43 @@
 # Mes Comptes
 
-Application de gestion de finances personnelles — suivi des dépenses, revenus et remboursements.
+**Une application de budget personnel qu'on remplit en parlant.**
+Dictez vos dépenses comme vous les diriez à quelqu'un, vérifiez la liste, et tout est classé : montants, dates, catégories, remboursements.
+Sans compte, sans abonnement, sans publicité : vos données restent sur votre appareil.
+
+👉 **Essayer tout de suite, sans rien installer : https://croquettemagique.github.io/mes-comptes/**
 
 ---
 
-## Fonctionnalités
+## Ce qui la rend différente
 
-- **Tableau de bord** : avoirs (saisis une fois, puis recalculés à chaque dépense ou revenu), bilan du mois, fin de mois estimée, graphiques
-- **Dictée vocale** : dictez vos dépenses (« 4 mars, Carrefour, 45 euros 20 »), vérifiez la liste, tout est enregistré d'un coup (micro intégré dans Chrome, Edge et Safari ; dans Opera ou Firefox, dictée du système : Windows + H ou deux fois Fn sur Mac)
-- **Dépenses** fixes et variables, classées par catégorie, avec recherche sur tous les mois
-- **Budgets par catégorie** avec alerte orange puis rouge
-- **Revenus** mensuels
-- **Remboursements** par personne, avec export PDF et envoi par WhatsApp
-- **Export** PDF du mois et export Excel (CSV) de toutes les données
-- **Sauvegarde automatique** quotidienne de la base (dossier `sauvegardes/`, 30 jours gardés)
-- Votre prénom affiché en haut à gauche (demandé au premier lancement, cliquez dessus pour le changer)
-- Création automatique du mois en cours (avec copie des charges fixes)
+**🎙️ La dictée vocale.** Dites « *4 septembre, Carrefour, 45 euros 20. Le 6, laverie, 3 euros. Pizza 12 euros, Julie doit me rembourser.* » : l'appli en tire trois dépenses, avec la date, le montant, la catégorie et la personne qui doit rembourser. Elle comprend les nombres en toutes lettres (« soixante-dix », « quatre-vingt-un »), « hier », « le 1er », « j'ai payé … chez … », la date dite avant ou après le prix, et reprend l'orthographe et la catégorie de vos dépenses habituelles. L'analyse se fait sur votre appareil, et tout passe par une liste à vérifier avant d'être enregistré.
+
+**💶 Des avoirs qui se tiennent à jour tout seuls.** Indiquez une fois ce que vous avez sur votre compte : le montant suit ensuite chaque dépense, chaque revenu et chaque remboursement reçu. L'appli estime aussi votre solde de fin de mois d'après votre rythme de dépenses.
+
+**🤝 Les remboursements par personne.** Marquez ce que vous avez avancé pour quelqu'un, filtrez par personne, et envoyez-lui le récapitulatif en PDF par WhatsApp en un clic.
+
+**Et aussi**
+- **Budgets par catégorie**, avec une barre qui passe à l'orange puis au rouge.
+- **Charges fixes** (loyer, abonnements…) recopiées automatiquement chaque mois.
+- **Recherche** sur tous les mois, par nom, personne ou catégorie.
+- **Exports** PDF du mois et Excel de toutes les données.
+- **Annuler** après une suppression.
+- **Mises à jour automatiques**, avec une fenêtre « Nouveautés » qui présente les changements.
+- Interface sombre noir et or, adaptée à l'ordinateur comme au téléphone.
+
+---
+
+## Deux façons de l'utiliser
+
+| | Version navigateur | Version installée |
+|---|---|---|
+| Installation | Aucune : une adresse web | Python et quelques minutes de mise en place |
+| Où sont les données | Dans le navigateur de l'appareil | Dans un fichier sur l'ordinateur (`comptes.db`) |
+| Sauvegardes | Bouton « Sauvegarder mes données » (fichier) | Copie automatique chaque jour |
+| Fonctionnalités | Toutes | Toutes |
+| Mises à jour | Automatiques | Automatiques, au lancement |
+
+Les deux versions partagent la même interface et les mêmes règles de calcul. Dans aucun cas les données ne sont envoyées sur internet.
 
 ---
 
@@ -26,135 +48,91 @@ Adresse : **https://croquettemagique.github.io/mes-comptes/**
 **Sur Mac (Safari)**
 1. Ouvrir l'adresse dans Safari.
 2. Menu **Fichier → Ajouter au Dock** (macOS 14 Sonoma ou plus récent). Une icône « Mes Comptes » apparaît dans le Dock.
-3. Utiliser **toujours cette icône** : l'appli s'ouvre dans sa propre fenêtre et garde ses données à part.
+3. Ouvrir l'appli **toujours par cette icône** : elle a sa propre fenêtre et garde ses données à part.
 
 **Sur iPhone / iPad** : Safari → bouton **Partager** → **Sur l'écran d'accueil**.
 
+**Sur PC** : ouvrir l'adresse dans Edge ou Chrome, puis menu **⋯ → Applications → Installer ce site en tant qu'application**.
+
 **À savoir**
-- Les données restent sur l'appareil (dans le navigateur) : rien n'est envoyé sur internet.
-- Elles ne passent pas d'un appareil à l'autre ; pour les transférer : « Sauvegarder mes données » puis « Restaurer une sauvegarde » sur l'autre appareil.
-- Faites une sauvegarde de temps en temps (l'appli le rappelle) : effacer les données de Safari les supprime aussi.
-- Les mises à jour sont automatiques : la nouvelle version s'affiche à l'ouverture suivante, avec la fenêtre « Nouveautés ».
+- Les données restent dans le navigateur de l'appareil et ne passent pas d'un appareil à l'autre. Pour les transférer : « Sauvegarder mes données », puis « Restaurer une sauvegarde » sur l'autre appareil.
+- Effacer les données de navigation du navigateur efface aussi vos comptes : faites une sauvegarde de temps en temps (l'appli le rappelle toutes les deux semaines).
 
 ---
 
-## Installation
+## Version installée
 
-### Mac (Safari) — pas à pas
+### Mac
 
-Le dépôt est privé : il faut un compte GitHub qui y a accès, et un **jeton d'accès** (une sorte de mot de passe en lecture seule) pour que le Mac puisse télécharger l'appli et ses mises à jour.
-
-**1. Créer le jeton d'accès** (sur github.com, connecté au compte qui a accès au dépôt)
-
-1. Photo de profil (en haut à droite) → **Settings** → tout en bas à gauche **Developer settings**.
-2. **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
-3. *Token name* : `Mes Comptes Mac` ; *Expiration* : la durée maximale proposée.
-4. *Repository access* : **Only select repositories** → choisir le dépôt de l'appli.
-5. *Permissions* → *Repository permissions* → **Contents : Read-only**.
-6. **Generate token**, puis copier le jeton (il commence par `github_pat_`). Il ne sera plus affiché ensuite.
-
-**2. Installer les outils (git et Python)**
-
-Ouvrir le **Terminal** (⌘ + Espace, taper « Terminal », Entrée) et taper :
-
-```bash
-xcode-select --install
-```
-
-Une fenêtre s'ouvre : **Installer**, puis attendre la fin (5 à 15 min). Si le Terminal répond « already installed », passer à la suite.
-
-**3. Télécharger l'appli**
-
-Sur la page GitHub du dépôt, bouton vert **Code** → copier l'adresse **HTTPS**. Dans le Terminal :
-
-```bash
-cd ~/Documents
-git clone <adresse copiée> MesComptes
-```
-
-- *Username* : votre nom d'utilisateur GitHub
-- *Password* : **coller le jeton** (rien ne s'affiche pendant la saisie, c'est normal), puis Entrée
-
-Le Mac retient le jeton dans le trousseau : il ne sera plus demandé, même pour les mises à jour.
-
-**4. Installer l'appli** (une seule fois)
-
-```bash
-bash ~/Documents/MesComptes/installer_mac.command
-```
-
-Le script installe ce qu'il faut et crée l'icône **« Mes Comptes »** sur le bureau.
-
-**5. Lancer**
-
-Double-clic sur l'icône **Mes Comptes** du bureau (la première fois : clic droit → **Ouvrir** → **Ouvrir**). Safari s'ouvre sur l'appli, **vide**, qui demande votre prénom.
-
-**6. Dictée vocale** (facultatif)
-
-**Réglages Système → Clavier → Dictée** : activer. Au premier usage du micro dans l'appli, Safari demande l'autorisation : **Autoriser**.
-
-Vos données restent sur votre Mac, dans `~/Documents/MesComptes/comptes.db` (copie automatique chaque jour dans `sauvegardes/`).
-
----
+1. **Installer les outils.** Ouvrir le **Terminal** (⌘ + Espace, taper « Terminal », Entrée) et taper :
+   ```bash
+   xcode-select --install
+   ```
+   Cliquer sur **Installer** et attendre la fin (5 à 15 minutes). Si le Terminal répond « already installed », passer à la suite.
+2. **Télécharger l'appli :**
+   ```bash
+   cd ~/Documents
+   git clone https://github.com/CroquetteMagique/mes-comptes.git MesComptes
+   ```
+3. **Installer (une seule fois) :**
+   ```bash
+   bash ~/Documents/MesComptes/installer_mac.command
+   ```
+   Le script prépare tout et crée l'icône **« Mes Comptes »** sur le bureau.
+4. **Lancer :** double-clic sur l'icône (la première fois : clic droit → **Ouvrir** → **Ouvrir**). Safari s'ouvre sur l'appli, vide, qui demande votre prénom.
+5. **Dictée vocale (facultatif) :** **Réglages Système → Clavier → Dictée**, activer, puis autoriser le micro quand Safari le demande.
 
 ### Windows
 
 1. Installer [Python 3](https://www.python.org) et [Git](https://git-scm.com).
-2. Dans un terminal : `git clone <adresse du dépôt> AppComptes`, puis `pip install -r AppComptes/requirements.txt`.
-3. Double-cliquer sur `lancer_silent.vbs` (sans fenêtre de terminal). L'appli s'ouvre dans Microsoft Edge (la dictée vocale y fonctionne), ou dans le navigateur par défaut si Edge est absent.
+2. Dans un terminal :
+   ```bash
+   git clone https://github.com/CroquetteMagique/mes-comptes.git MesComptes
+   pip install -r MesComptes/requirements.txt
+   ```
+3. Double-cliquer sur `lancer_silent.vbs`. L'appli s'ouvre dans Microsoft Edge (la dictée vocale y fonctionne).
 
 > Raccourci bureau : clic droit sur `lancer_silent.vbs` → Envoyer vers → Bureau (créer un raccourci).
 
----
+### Mises à jour de la version installée
 
-## Mises à jour
+À chaque lancement, l'appli vérifie s'il existe une nouvelle version et l'installe avant de démarrer. Pour l'obtenir : fermer l'onglet de l'appli, attendre deux minutes (elle s'arrête seule), puis la relancer.
 
-**Automatiques.** À chaque lancement, l'appli regarde s'il existe une nouvelle version sur GitHub et l'installe avant de démarrer. Une fenêtre **« Nouveautés »** présente alors les changements (vous pouvez la rouvrir depuis le lien « Nouveautés » en bas à gauche).
+- Vos données (`comptes.db`, `sauvegardes/`) ne sont jamais modifiées, et une copie de la base est faite juste avant.
+- Si un fichier de l'appli a été modifié à la main, ou si la nouvelle version ne passe pas les vérifications, rien n'est changé.
+- Sans internet, l'appli démarre normalement avec la version déjà installée.
 
-Une nouvelle version se télécharge au **lancement suivant** : fermez l'onglet de l'appli, attendez 2 minutes (l'appli s'arrête seule), puis relancez-la.
+Journal : `sauvegardes/mises_a_jour.log`. Mise à jour manuelle : `mise_a_jour_mac.command` ou `mise_a_jour_windows.bat`.
 
-Garanties :
-- vos données (`comptes.db`, `sauvegardes/`) ne sont jamais modifiées par une mise à jour, et une copie de la base est faite juste avant ;
-- si un fichier de l'appli a été modifié à la main, ou si la nouvelle version ne passe pas les vérifications, rien n'est changé ;
-- sans internet, l'appli démarre normalement avec la version déjà installée.
+### Dictée selon le navigateur
 
-Journal des mises à jour : `sauvegardes/mises_a_jour.log`.
-Mise à jour manuelle possible : `mise_a_jour_mac.command` (Mac) ou `mise_a_jour_windows.bat` (Windows).
+Le micro de l'appli fonctionne dans **Chrome, Edge et Safari** (la reconnaissance vocale du navigateur demande une connexion internet). Dans Opera ou Firefox, l'appli propose la dictée du système : **Windows + H**, ou deux fois **Fn** sur Mac.
 
 ---
 
-## Structure du projet
+## Pour les développeurs
 
 ```
-AppComptes/
-├── app.py                      # Serveur Flask (backend + API)
-├── dictee.py                   # Analyse du texte dicté
+├── app.py                      # Serveur Flask : API et exports (version installée)
+├── dictee.py                   # Analyse du texte dicté (règles, sans IA)
 ├── mise_a_jour.py              # Mise à jour automatique au démarrage
 ├── notes_de_version.json       # Nouveautés affichées après une mise à jour
 ├── requirements.txt            # Dépendances Python
-├── outils/construire_site.py   # Construit la version navigateur (GitHub Pages)
-├── static/js/local-api.js      # Version navigateur : remplace le serveur
-├── static/js/dictee.js         # Dictée en JavaScript (mêmes règles que dictee.py)
-├── comptes.db                  # Base de données SQLite (non partagée)
-├── templates/
-│   └── index.html              # Interface utilisateur
+├── templates/index.html        # Interface (commune aux deux versions)
 ├── static/
 │   ├── css/style.css
-│   └── js/app.js
-├── installer_mac.command       # Installateur Mac (une seule fois)
-├── lancer_mac.command          # Lanceur Mac alternatif
+│   ├── icones/                 # Icônes de l'appli
+│   └── js/
+│       ├── app.js              # Interface
+│       ├── local-api.js        # Version navigateur : remplace le serveur, données dans le navigateur
+│       └── dictee.js           # Dictée en JavaScript (mêmes règles que dictee.py)
+├── outils/construire_site.py   # Construit la version navigateur
+├── .github/workflows/site.yml  # Met en ligne la version navigateur à chaque push
+├── installer_mac.command       # Installation Mac (une fois)
+├── lancer_mac.command          # Lanceur Mac
 ├── lancer_silent.vbs           # Lanceur Windows (sans terminal)
-├── mise_a_jour_mac.command     # Mise à jour Mac
-└── mise_a_jour_windows.bat     # Mise à jour Windows
+├── mise_a_jour_mac.command     # Mise à jour manuelle Mac
+└── mise_a_jour_windows.bat     # Mise à jour manuelle Windows
 ```
 
----
-
-## Stack technique
-
-- **Backend** : Python 3 / Flask
-- **Base de données** : SQLite
-- **Frontend** : HTML / CSS / JavaScript (vanilla)
-- **Graphiques** : Chart.js
-- **Export PDF** : fpdf2
-- **Fonts** : Playfair Display, Outfit, JetBrains Mono (Google Fonts)
+**Technique** : Python 3.9+ et Flask, SQLite, HTML/CSS/JavaScript sans framework, Chart.js pour les graphiques, fpdf2 et jsPDF pour les PDF, police Manrope.

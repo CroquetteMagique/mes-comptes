@@ -4,6 +4,7 @@ name: Version navigateur
 on:
   push:
     branches: [main]
+    paths-ignore: ["README.md"]     # le README ne fait pas partie du site
   workflow_dispatch:
 
 permissions:
