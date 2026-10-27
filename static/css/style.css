@@ -924,6 +924,5 @@ button.logo-text:hover { filter: brightness(1.15); }
 @media (max-width: 860px) { .lien-notes { display: none; } }
 
 /* Version navigateur : sauvegarde / restauration */
-.liens-local { display: none; }
-.mode-local .liens-local { display: block; margin-top: .6rem; }
-.mode-local .liens-local .lien-notes { margin-top: .25rem; }
+.liens-local { margin-top: .6rem; }
+.liens-local .lien-notes { margin-top: .25rem; }

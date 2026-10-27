@@ -10,7 +10,6 @@
 (function () {
   "use strict";
   window.MES_COMPTES_LOCAL = true;
-  document.documentElement.classList.add("mode-local");
 
   const CLE = "mes-comptes-donnees";
   const VERSION_DONNEES = 1;
@@ -20,14 +19,16 @@
 
   // ── Stockage ───────────────────────────────────────────────────────────────
 
-  function charger() {
-    let d;
-    try { d = JSON.parse(localStorage.getItem(CLE) || "null"); } catch (e) { d = null; }
-    d = Object.assign(vide(), d || {});
+  // Complète des données (lues ou restaurées) au format actuel
+  function normaliser(d) {
+    d = Object.assign(vide(), d);
     d.seq = Object.assign({ depenses: 0, revenus: 0 }, d.seq);
     // migrations futures : if (d.v < 2) { ... ajouter des champs ... }
     d.v = VERSION_DONNEES;
     return d;
+  }
+  function charger() {
+    try { return normaliser(JSON.parse(localStorage.getItem(CLE) || "null")); } catch (e) { return normaliser(null); }
   }
   let db = charger();
   function enregistrer() {
@@ -38,10 +39,9 @@
   // ── Outils ─────────────────────────────────────────────────────────────────
 
   const deux = (n) => String(n).padStart(2, "0");
-  const today = () => new Date();
-  const moisCourant = () => `${today().getFullYear()}-${deux(today().getMonth() + 1)}`;
+  const moisCourant = () => { const t = new Date(); return `${t.getFullYear()}-${deux(t.getMonth() + 1)}`; };
   const somme = (rows) => rows.reduce((s, r) => s + r.montant, 0);
-  const r2 = (x) => Math.round(x * 100 + Number.EPSILON * Math.sign(x)) / 100;
+  const r2 = window.Dictee.arrondi;                          // même arrondi que round(x, 2) dans app.py
   const nocase = (a, b) => a.toLocaleLowerCase().localeCompare(b.toLocaleLowerCase());
   // tri comme SQLite : NULL avant les valeurs en ordre croissant
   const cmp = (a, b) => (a === b ? 0 : a === null || a === undefined ? -1 : b === null || b === undefined ? 1 : a < b ? -1 : 1);
@@ -49,7 +49,7 @@
     for (const [k, sens] of cles) { const c = cmp(x[0][k], y[0][k]) * sens; if (c) return c; }
     return x[1] - y[1];
   }).map((x) => x[0]);
-  const copie = (o) => JSON.parse(JSON.stringify(o));
+  const aRembourser = (rows) => tri(rows.filter((d) => d.a_rembourser >= 1), ["a_rembourser", 1], ["mois", -1], ["date_echeance", -1]);
 
   function personne(d) {
     const p = String(d.personne || "").trim();
@@ -95,7 +95,8 @@
 
   // ── Exports (CSV, PDF) ─────────────────────────────────────────────────────
 
-  const euro = (n) => n.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " €";
+  const nombreFr = (n) => n.toFixed(2).replace(".", ",");
+  const euro = (n) => nombreFr(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " €";
   const dateFr = (s) => (s ? s.split("-").reverse().join("/") : "-");
   const nomMois = (m) => {
     const [y, mo] = m.split("-");
@@ -106,12 +107,11 @@
   function csv() {
     const ligne = (cols) => cols.map((c) => { const s = String(c ?? ""); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(";");
     const statut = { 0: "", 1: "En attente", 2: "Remboursé" };
-    const n = (x) => x.toFixed(2).replace(".", ",");
     const out = [ligne(["Sens", "Mois", "Date", "Élément", "Catégorie", "Type", "Montant", "À rembourser", "Personne"])];
     tri(db.depenses, ["mois", 1], ["date_echeance", 1]).forEach((r) => out.push(ligne(["Dépense", r.mois, r.date_echeance || "",
-      r.element, r.categorie, r.type_depense || "", n(r.montant), statut[r.a_rembourser] || "", r.personne || ""])));
+      r.element, r.categorie, r.type_depense || "", nombreFr(r.montant), statut[r.a_rembourser] || "", r.personne || ""])));
     tri(db.revenus, ["mois", 1], ["date_revenu", 1]).forEach((r) => out.push(ligne(["Revenu", r.mois, r.date_revenu || "",
-      r.element, "", "", n(r.montant), "", ""])));
+      r.element, "", "", nombreFr(r.montant), "", ""])));
     return new Blob(["﻿" + out.join("\r\n") + "\r\n"], { type: "text/csv" });
   }
 
@@ -133,7 +133,8 @@
   }
   function tableau(pdf, y, titre, colonnes, largeurs, lignes, total) {
     const finColonnes = 15 + largeurs.slice(0, -1).reduce((a, b) => a + b, 0);
-    if (y + 20 > 285) { pdf.addPage(); y = 15; }
+    const saut = (h) => { if (y + h <= 285) return false; pdf.addPage(); y = 15; return true; };   // nouvelle page si besoin
+    saut(20);
     pdf.setFont("helvetica", "bold"); pdf.setFontSize(10); pdf.setTextColor(30, 30, 30); pdf.text(titre, 15, y + 5); y += 8;
     const entete = () => {
       pdf.setFillColor(230, 230, 240); pdf.rect(15, y, 180, 7, "F");
@@ -143,7 +144,7 @@
     };
     entete();
     lignes.forEach((l, i) => {
-      if (y + 6 > 285) { pdf.addPage(); y = 15; entete(); }
+      if (saut(6)) entete();
       pdf.setFillColor(...(i % 2 ? [245, 245, 248] : [252, 252, 252])); pdf.rect(15, y, 180, 6, "F");
       let x = 15;
       l.cellules.forEach((c, k) => {
@@ -154,7 +155,7 @@
       y += 6;
     });
     if (total) {
-      if (y + 8 > 285) { pdf.addPage(); y = 15; }
+      saut(8);
       pdf.setFillColor(210, 210, 230); pdf.rect(15, y, 180, 7, "F");
       pdf.setFont("helvetica", "bold"); pdf.setTextColor(30, 30, 80); pdf.setFontSize(8);
       pdf.text(total[0], finColonnes - 2, y + 4.8, { align: "right" });
@@ -186,8 +187,7 @@
   }
 
   function pdfRemboursements(mois, qui) {
-    let rows = db.depenses.filter((d) => d.a_rembourser >= 1 && (!mois || d.mois === mois) && (!qui || d.personne === qui));
-    rows = tri(rows, ["a_rembourser", 1], ["mois", -1], ["date_echeance", -1]);
+    const rows = aRembourser(db.depenses.filter((d) => (!mois || d.mois === mois) && (!qui || d.personne === qui)));
     const attente = somme(rows.filter((r) => r.a_rembourser === 1)), recu = somme(rows.filter((r) => r.a_rembourser === 2));
     const pdf = pdfBase(`Remboursements - ${mois ? nomMois(mois) : "Tous les mois"}${qui ? " - " + qui : ""}`);
     carte(pdf, 15, 38, "En attente", euro(attente), [255, 245, 210]);
@@ -213,9 +213,6 @@
     "Content-Type": blob.type, "Content-Disposition": `attachment; filename="${nom}"` } });
 
   const routes = [
-    ["POST", /^\/ping$/, () => new Response(null, { status: 204 })],
-    ["POST", /^\/bye$/, () => new Response(null, { status: 204 })],
-
     ["GET", /^\/api\/depenses\/recherche$/, (m, q) => {
       const t = (q.get("q") || "").trim().toLowerCase(), typ = q.get("type") || "";
       const rows = db.depenses.filter((d) => (!t || d.element.toLowerCase().includes(t) || (d.personne || "").toLowerCase().includes(t))
@@ -230,9 +227,9 @@
         a_rembourser: Number(b.a_rembourser || 0), type_depense: b.type_depense || "autre", personne: personne(b) });
       enregistrer(); return json({ ok: true });
     }],
-    ["DELETE", /^\/api\/depenses\/(\d+)$/, (m) => {
-      const i = db.depenses.findIndex((x) => x.id === Number(m[1]));
-      const sup = i >= 0 ? db.depenses.splice(i, 1)[0] : null;
+    ["DELETE", /^\/api\/(depenses|revenus)\/(\d+)$/, (m) => {
+      const liste = db[m[1]], i = liste.findIndex((x) => x.id === Number(m[2]));
+      const sup = i >= 0 ? liste.splice(i, 1)[0] : null;
       enregistrer(); return json({ ok: true, supprime: sup });
     }],
     ["POST", /^\/api\/depenses\/(\d+)\/toggle-rembourse$/, (m) => {
@@ -240,7 +237,7 @@
       if (d) d.a_rembourser = d.a_rembourser === 1 ? 2 : 1;
       enregistrer(); return json({ ok: true, rembourse: !!d && d.a_rembourser === 2 });
     }],
-    ["GET", /^\/api\/remboursements$/, () => json(tri(db.depenses.filter((d) => d.a_rembourser >= 1), ["a_rembourser", 1], ["mois", -1], ["date_echeance", -1]))],
+    ["GET", /^\/api\/remboursements$/, () => json(aRembourser(db.depenses))],
     ["GET", /^\/api\/suggestions$/, () => json([...new Set(db.depenses.map((d) => d.element))].sort(nocase))],
     ["GET", /^\/api\/personnes$/, () => json([...new Set(db.depenses.map((d) => d.personne).filter(Boolean))].sort(nocase))],
 
@@ -250,11 +247,6 @@
       db.revenus.push({ id: db.seq.revenus, mois: b.mois, element: b.element, date_revenu: b.date_revenu || null,
         montant: Number(b.montant), created_at: new Date().toISOString() });
       enregistrer(); return json({ ok: true });
-    }],
-    ["DELETE", /^\/api\/revenus\/(\d+)$/, (m) => {
-      const i = db.revenus.findIndex((x) => x.id === Number(m[1]));
-      const sup = i >= 0 ? db.revenus.splice(i, 1)[0] : null;
-      enregistrer(); return json({ ok: true, supprime: sup });
     }],
 
     ["GET", /^\/api\/bilan\/([^/]+)$/, (m) => {
@@ -278,7 +270,7 @@
     ["GET", /^\/api\/avoirs$/, () => json({ solde: solde() })],
     ["PUT", /^\/api\/avoirs$/, (m, q, b) => { db.avoirs = { solde_saisi: Number(b.solde), net_ref: net() }; enregistrer(); return json({ ok: true }); }],
     ["GET", /^\/api\/prevision$/, () => {
-      const t = today(), mois = moisCourant();
+      const t = new Date(), mois = moisCourant();
       const variables = somme(db.depenses.filter((d) => d.mois === mois && d.categorie === "variable"));
       const rythme = variables / t.getDate();
       const restants = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate() - t.getDate();
@@ -287,18 +279,21 @@
         fin_de_mois: s === null ? null : r2(s - rythme * restants), rembours_attente: r2(somme(db.depenses.filter((d) => d.a_rembourser === 1))) });
     }],
 
-    ["GET", /^\/api\/prenom$/, () => json({ prenom: db.reglages.prenom === undefined ? null : db.reglages.prenom })],
+    ["GET", /^\/api\/prenom$/, () => json({ prenom: db.reglages.prenom ?? null })],
     ["PUT", /^\/api\/prenom$/, (m, q, b) => {
       const p = String((b || {}).prenom || "").split(/\s+/).filter(Boolean).join(" ").slice(0, 30);
       db.reglages.prenom = p; enregistrer(); return json({ ok: true, prenom: p });
     }],
     ["GET", /^\/api\/notes$/, async () => {
       const n = await notes();
-      if (!n.length) return json({ nouvelles: [], toutes: [], version: null });
+      // rappel de sauvegarde : des dépenses, et aucune sauvegarde depuis 14 jours (champ absent côté app.py)
+      const derniere = db.reglages.derniere_sauvegarde;
+      const rappel_sauvegarde = db.depenses.length > 0 && !(derniere && Date.now() - Date.parse(derniere) < 14 * 864e5);
+      if (!n.length) return json({ nouvelles: [], toutes: [], version: null, rappel_sauvegarde });
       let nouvelles = [];
       if (db.reglages.notes_vues === undefined) { db.reglages.notes_vues = n[0].id; enregistrer(); }
       else nouvelles = n.filter((x) => x.id > (db.reglages.notes_vues || ""));
-      return json({ nouvelles, toutes: n.slice(0, 10), version: n[0].id });
+      return json({ nouvelles, toutes: n.slice(0, 10), version: n[0].id, rappel_sauvegarde });
     }],
     ["PUT", /^\/api\/notes\/vues$/, async () => {
       const n = await notes();
@@ -334,8 +329,7 @@
     // Sauvegarde / restauration des données (fichier sur l'ordinateur)
     ["GET", /^\/api\/sauvegarde$/, () => {
       db.reglages.derniere_sauvegarde = new Date().toISOString(); enregistrer();
-      const exp = copie(db);
-      return fichier(new Blob([JSON.stringify({ application: "mes-comptes", exporte_le: exp.reglages.derniere_sauvegarde, donnees: exp }, null, 1)],
+      return fichier(new Blob([JSON.stringify({ application: "mes-comptes", exporte_le: db.reglages.derniere_sauvegarde, donnees: db }, null, 1)],
         { type: "application/json" }), `mes_comptes_sauvegarde_${new Date().toISOString().slice(0, 10)}.json`);
     }],
     ["POST", /^\/api\/restauration$/, (m, q, b) => {
@@ -343,13 +337,11 @@
       if (!d || !Array.isArray(d.depenses) || !Array.isArray(d.revenus)) {
         return json({ ok: false, erreur: "Ce fichier n'est pas une sauvegarde de Mes Comptes." }, 400);
       }
-      const avant = localStorage.getItem(CLE);
+      const ancien = db;
       try {
-        localStorage.setItem(CLE, JSON.stringify(d));
-        db = charger(); enregistrer();
+        db = normaliser(d); enregistrer();          // si l'écriture échoue, le stockage garde l'ancienne version
       } catch (e) {
-        if (avant !== null) localStorage.setItem(CLE, avant);
-        db = charger();
+        db = ancien;
         return json({ ok: false, erreur: "Restauration impossible : le stockage du navigateur est plein." }, 500);
       }
       return json({ ok: true, depenses: db.depenses.length, revenus: db.revenus.length });
@@ -360,7 +352,7 @@
 
   window.fetch = async function (entree, options) {
     const url = new URL(typeof entree === "string" ? entree : entree.url, location.href);
-    if (url.origin !== location.origin || !(url.pathname.startsWith("/api/") || url.pathname === "/ping" || url.pathname === "/bye")) {
+    if (url.origin !== location.origin || !url.pathname.startsWith("/api/")) {
       return fetchReseau(entree, options);
     }
     const methode = ((options && options.method) || "GET").toUpperCase();
@@ -374,5 +366,4 @@
     }
     return json({ erreur: "introuvable" }, 404);
   };
-  navigator.sendBeacon = () => true;                   // pas de serveur à prévenir
 })();

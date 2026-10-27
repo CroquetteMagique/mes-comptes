@@ -77,10 +77,12 @@
           <svg aria-hidden="true"><use href="#i-plus"/></svg>
         </button>
       </div>
+{% if mode_local %}
       <div class="liens-local">
         <button class="lien-notes" onclick="sauvegarderDonnees()">Sauvegarder mes données</button>
         <button class="lien-notes" onclick="restaurerDonnees()">Restaurer une sauvegarde</button>
       </div>
+{% endif %}
       <button class="lien-notes" onclick="ouvrirNotes()">Nouveautés <span id="version-app"></span></button>
     </div>
   </aside>
@@ -578,7 +580,7 @@
 
 {% if mode_local %}
   <!-- Version navigateur : pas de serveur, les données restent sur cet appareil -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script async src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="static/js/dictee.js?v={{ version }}"></script>
   <script src="static/js/local-api.js?v={{ version }}"></script>
 {% endif %}

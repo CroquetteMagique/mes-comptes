@@ -55,14 +55,13 @@
   const cle = (s) => sansAccents(s).toLowerCase().trim();
   const echapper = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+  // Motifs compilés une fois (pas de « lookbehind » : non pris en charge par les anciens Safari)
+  const MOTIFS_TYPES = Object.keys(MOTS_CLES).map((typ) =>
+    [typ, MOTS_CLES[typ].map((m) => new RegExp("[^a-z]" + echapper(m) + "(?![a-z])"))]);
+
   function devinerType(texte) {
     const k = " " + cle(texte) + " ";
-    for (const typ of Object.keys(MOTS_CLES)) {
-      for (const m of MOTS_CLES[typ]) {
-        // (pas de « lookbehind » : non pris en charge par les anciens Safari)
-        if (new RegExp("[^a-z]" + echapper(m) + "(?![a-z])").test(k)) return typ;
-      }
-    }
+    for (const [typ, motifs] of MOTIFS_TYPES) if (motifs.some((re) => re.test(k))) return typ;
     return null;
   }
 
@@ -444,7 +443,7 @@
     return { depenses, non_compris: nonCompris };
   }
 
-  const api = { analyser, devinerType };
+  const api = { analyser, devinerType, arrondi };
   racine.Dictee = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

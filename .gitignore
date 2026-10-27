@@ -31,9 +31,6 @@ templates/perso/
 # Sauvegardes quotidiennes de la base
 sauvegardes/
 
-# Tests locaux (données inventées, non publiés)
-test_app.py
-
 # Tous les tests locaux (phrases et données inventées)
 test_*.py
 

@@ -15,17 +15,27 @@ const HORS_LIGNE = window.MES_COMPTES_LOCAL
   ? "Enregistrement impossible : le stockage du navigateur est plein ou bloqué."
   : "L'application ne répond plus. Fermez cette page et relancez Mes Comptes.";
 
-// Téléchargement d'un export (PDF, Excel, sauvegarde) — marche avec le serveur et en version navigateur
-async function telecharger(url) {
+// Exports (PDF, Excel, sauvegarde) — marchent avec le serveur et en version navigateur.
+// Le nom du fichier vient de l'en-tête Content-Disposition (forme UTF-8 en priorité).
+async function recupererFichier(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} : ${res.status}`);
-  const nom = (/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") || "") || [])[1] || "export";
+  const cd = res.headers.get("Content-Disposition") || "";
+  const m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
+  return { blob: await res.blob(), nom: m ? decodeURIComponent(m[1]) : "export" };
+}
+
+function enregistrerFichier({ blob, nom }) {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(await res.blob());
-  a.download = decodeURIComponent(nom);
+  a.href = URL.createObjectURL(blob);
+  a.download = nom;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+async function telecharger(url) {
+  enregistrerFichier(await recupererFichier(url));
 }
 
 // Envoi vers le serveur qui échoue franchement (au lieu de faire comme si c'était enregistré)
@@ -512,19 +522,16 @@ function downloadPDFRemboursementsMois(mois) {
 // WhatsApp ne permet pas d'envoyer un fichier par lien : sans menu Partager,
 // on télécharge le PDF et on ouvre WhatsApp pour le joindre à la main.
 async function sharePDFRemboursements(mois) {
-  const p    = personneChoisie();
-  const blob = await fetch(urlRemboursements(mois)).then((r) => r.blob());
-  const file = new File([blob], `remboursements_${mois || "tous"}${p ? "_" + p : ""}.pdf`, { type: "application/pdf" });
+  const p       = personneChoisie();
+  const fichier = await recupererFichier(urlRemboursements(mois));
+  const file    = new File([fichier.blob], fichier.nom, { type: "application/pdf" });
   const text = `Remboursements ${mois ? formatMoisLabel(mois) : ""}${p ? " pour " + p : ""}`.replace(/\s+/g, " ").trim();
 
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], title: text, text }); } catch (e) {}
     return;
   }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = file.name;
-  a.click();
+  enregistrerFichier(fichier);
   window.open(`https://wa.me/?text=${encodeURIComponent(text + " (PDF en pièce jointe)")}`, "_blank");
 }
 
@@ -1095,12 +1102,15 @@ document.querySelectorAll(".modal-overlay").forEach((overlay) => {
 
 // Signal de vie pour le serveur : au chargement, toutes les 5 s, et au retour sur l'onglet
 // (en arrière-plan, le navigateur espace les signaux à ~1 par minute).
-const ping = () => fetch("/ping", { method: "POST" }).catch(() => toast(HORS_LIGNE));
-ping();
-setInterval(ping, 5000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) ping(); });
-// Fermeture de la page : le serveur s'arrêtera si aucune page ne revient dans les 90 s
-window.addEventListener("pagehide", () => navigator.sendBeacon("/bye"));
+// Version navigateur : pas de serveur à garder en vie.
+if (!window.MES_COMPTES_LOCAL) {
+  const ping = () => fetch("/ping", { method: "POST" }).catch(() => toast(HORS_LIGNE));
+  ping();
+  setInterval(ping, 5000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) ping(); });
+  // Fermeture de la page : le serveur s'arrêtera si aucune page ne revient dans les 90 s
+  window.addEventListener("pagehide", () => navigator.sendBeacon("/bye"));
+}
 // Toute requête qui échoue sans être gérée prévient l'utilisateur au lieu d'afficher du vide
 window.addEventListener("unhandledrejection", () => toast(HORS_LIGNE));
 
@@ -1147,16 +1157,6 @@ function restaurerDonnees() {
   champ.click();
 }
 
-// Rappel : sans sauvegarde depuis 14 jours, proposer d'en faire une
-async function rappelSauvegarde() {
-  if (!window.MES_COMPTES_LOCAL) return;
-  const d = JSON.parse(localStorage.getItem("mes-comptes-donnees") || "{}");
-  if (!(d.depenses || []).length) return;
-  const derniere = d.reglages && d.reglages.derniere_sauvegarde;
-  if (derniere && Date.now() - Date.parse(derniere) < 14 * 864e5) return;
-  setTimeout(() => toast("Vos données ne sont que dans ce navigateur. Pensez à les sauvegarder.", "Sauvegarder", sauvegarderDonnees), 4000);
-}
-
 // ── Notes de version ─────────────────────────────────────────────────────────
 // Après une mise à jour automatique, les nouveautés s'affichent une seule fois.
 
@@ -1177,6 +1177,10 @@ async function chargerNotes() {
   notesData = await fetch("/api/notes").then((r) => r.json());
   if (notesData.version) document.getElementById("version-app").textContent = `(${dateVersion(notesData.version)})`;
   if (notesData.nouvelles.length) afficherNotes(notesData.nouvelles, "L'application vient d'être mise à jour.");
+  // Version navigateur : sans sauvegarde récente, proposer d'en faire une
+  if (notesData.rappel_sauvegarde) {
+    setTimeout(() => toast("Vos données ne sont que dans ce navigateur. Pensez à les sauvegarder.", "Sauvegarder", sauvegarderDonnees), 4000);
+  }
 }
 
 function ouvrirNotes() {
@@ -1194,8 +1198,7 @@ function fermerNotes() {
 // Fenêtres d'accueil l'une après l'autre (prénom puis nouveautés), sans bloquer le chargement
 (async () => {
   await demanderPrenomSiBesoin();
-  await chargerNotes();
-  rappelSauvegarde();
+  chargerNotes();
 })();
 
 (async () => {
