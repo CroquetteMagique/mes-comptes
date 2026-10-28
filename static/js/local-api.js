@@ -119,6 +119,65 @@
   }).map((x) => x[0]);
   const aRembourser = (rows) => tri(rows.filter((d) => d.a_rembourser >= 1), ["a_rembourser", 1], ["mois", -1], ["date_echeance", -1]);
 
+  // ── Validation des données reçues (mêmes règles que app.py) ────────────────
+  const TYPES = new Set(window.Dictee.TYPES);
+  const RE_MOIS = /^\d{4}-(0[1-9]|1[0-2])$/;
+  class Invalide extends Error {}
+  const exiger = (ok, message) => { if (!ok) throw new Invalide(message); };
+  const lireMois = (v) => { exiger(typeof v === "string" && RE_MOIS.test(v), "Mois invalide."); return v; };
+  function lireDate(v) {
+    if (v === null || v === undefined || v === "") return null;
+    const [a, m, j] = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v.split("-").map(Number) : [];
+    const t = new Date(Date.UTC(a, m - 1, j));
+    exiger(a && t.getUTCMonth() === m - 1 && t.getUTCDate() === j, "Date invalide.");
+    return v;
+  }
+  function lireMontant(v) {
+    const x = Number(v);
+    exiger(v !== null && v !== "" && typeof v !== "boolean" && Number.isFinite(x) && Math.abs(x) <= 1e9, "Montant invalide.");
+    return x;
+  }
+  function lireTexte(v, longueur, requis = true) {
+    const s = String(v ?? "").trim().slice(0, longueur);
+    exiger(!requis || s, "Nom manquant.");
+    return s;
+  }
+  function lireDepense(d) {
+    exiger(d && (d.categorie === "fixe" || d.categorie === "variable"), "Catégorie invalide.");
+    const remb = d.a_rembourser || 0;
+    exiger([0, 1, 2].includes(remb), "Statut de remboursement invalide.");
+    const v = { mois: lireMois(d.mois), categorie: d.categorie, element: lireTexte(d.element, 200),
+      date_echeance: lireDate(d.date_echeance), montant: lireMontant(d.montant), a_rembourser: remb,
+      type_depense: TYPES.has(d.type_depense) ? d.type_depense : "autre", personne: lireTexte(d.personne, 60, false) };
+    v.personne = personne(v);
+    return v;
+  }
+  const lireRevenu = (r) => {
+    exiger(r, "Données illisibles.");
+    return { element: lireTexte(r.element, 200), date_revenu: lireDate(r.date_revenu), montant: lireMontant(r.montant), fixe: r.fixe ? 1 : 0 };
+  };
+
+  // Une sauvegarde peut venir de n'importe où : chaque ligne est revérifiée,
+  // les lignes invalides sont écartées et les identifiants refaits.
+  function assainir(d) {
+    let ignorees = 0;
+    const garder = (rows, lire) => rows.flatMap((x) => {
+      try { return [Object.assign({ mois: lireMois(x && x.mois) }, lire(x), { created_at: String((x && x.created_at) || "") })]; }
+      catch (e) { if (!(e instanceof Invalide)) throw e; ignorees += 1; return []; }
+    }).map((x, i) => Object.assign(x, { id: i + 1 }));
+    const depenses = garder(d.depenses, lireDepense), revenus = garder(d.revenus, lireRevenu);
+    const budgets = {};
+    Object.entries(d.budgets || {}).forEach(([t, v]) => { if (TYPES.has(t) && Number.isFinite(Number(v)) && Number(v) > 0) budgets[t] = Number(v); });
+    const a = d.avoirs;
+    const avoirs = a && Number.isFinite(Number(a.solde_saisi)) && Number.isFinite(Number(a.net_ref))
+      ? { solde_saisi: Number(a.solde_saisi), net_ref: Number(a.net_ref) } : null;
+    const reglages = {};
+    ["prenom", "notes_vues", "derniere_sauvegarde", "modifie_le", "revenus_fixes_mois"].forEach((k) => {
+      if (d.reglages && typeof d.reglages[k] === "string") reglages[k] = d.reglages[k].slice(0, 100);
+    });
+    return { donnees: { depenses, revenus, budgets, avoirs, reglages, seq: { depenses: depenses.length, revenus: revenus.length } }, ignorees };
+  }
+
   function personne(d) {
     const p = String(d.personne || "").trim();
     return p && Number(d.a_rembourser || 0) ? p.charAt(0).toUpperCase() + p.slice(1) : null;
@@ -132,7 +191,7 @@
     });
   }
 
-  const champsRevenu = (r) => ({ element: r.element, date_revenu: r.date_revenu || null, montant: Number(r.montant), fixe: Number(r.fixe || 0) });
+  const champsRevenu = (r) => ({ element: r.element, date_revenu: r.date_revenu || null, montant: Number(r.montant), fixe: r.fixe ? 1 : 0 });
   function ajouterRevenu(r) {
     db.seq.revenus += 1;
     db.revenus.push({ id: db.seq.revenus, mois: r.mois, ...champsRevenu(r), created_at: new Date().toISOString() });
@@ -192,7 +251,11 @@
   };
 
   function csv() {
-    const ligne = (cols) => cols.map((c) => { const s = String(c ?? ""); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(";");
+    const ligne = (cols) => cols.map((c) => {
+      let s = String(c ?? "");
+      if (/^[=+\-@\t\r]/.test(s) && !/^-?\d/.test(s)) s = "'" + s;      // Excel exécuterait « =… » comme une formule
+      return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(";");
     const statut = { 0: "", 1: "En attente", 2: "Remboursé" };
     const out = [ligne(["Sens", "Mois", "Date", "Élément", "Catégorie", "Type", "Montant", "À rembourser", "Personne"])];
     tri(db.depenses, ["mois", 1], ["date_echeance", 1]).forEach((r) => out.push(ligne(["Dépense", r.mois, r.date_echeance || "",
@@ -297,7 +360,7 @@
 
   const json = (o, statut = 200) => new Response(JSON.stringify(o), { status: statut, headers: { "Content-Type": "application/json" } });
   const fichier = (blob, nom) => new Response(blob, { headers: {
-    "Content-Type": blob.type, "Content-Disposition": `attachment; filename="${nom}"` } });
+    "Content-Type": blob.type, "Content-Disposition": `attachment; filename="${nom.replace(/["\\\r\n]/g, "")}"` } });
 
   const routes = [
     ["GET", /^\/api\/depenses\/recherche$/, (m, q) => {
@@ -307,11 +370,12 @@
       return json(tri(rows, ["mois", -1], ["date_echeance", -1]).slice(0, 500));
     }],
     ["GET", /^\/api\/depenses\/([^/]+)$/, (m) => json(tri(db.depenses.filter((d) => d.mois === m[1]), ["categorie", 1], ["date_echeance", 1]))],
-    ["POST", /^\/api\/depenses$/, (m, q, b) => { ajouterDepense(b); enregistrer(); return json({ ok: true }); }],
+    ["POST", /^\/api\/depenses$/, (m, q, b) => { ajouterDepense(lireDepense(b)); enregistrer(); return json({ ok: true }); }],
     ["PUT", /^\/api\/depenses\/(\d+)$/, (m, q, b) => {
+      const v = lireDepense(Object.assign({}, b, { mois: (b && b.mois) || "2000-01" }));   // le mois ne change pas
+      delete v.mois;
       const d = db.depenses.find((x) => x.id === Number(m[1]));
-      if (d) Object.assign(d, { element: b.element, date_echeance: b.date_echeance || null, montant: Number(b.montant), categorie: b.categorie,
-        a_rembourser: Number(b.a_rembourser || 0), type_depense: b.type_depense || "autre", personne: personne(b) });
+      if (d) Object.assign(d, v);
       enregistrer(); return json({ ok: true });
     }],
     ["DELETE", /^\/api\/(depenses|revenus)\/(\d+)$/, (m) => {
@@ -321,8 +385,9 @@
     }],
     ["POST", /^\/api\/depenses\/(\d+)\/toggle-rembourse$/, (m) => {
       const d = db.depenses.find((x) => x.id === Number(m[1]));
-      if (d) d.a_rembourser = d.a_rembourser === 1 ? 2 : 1;
-      enregistrer(); return json({ ok: true, rembourse: !!d && d.a_rembourser === 2 });
+      if (!d) return json({ ok: false, erreur: "Dépense introuvable." }, 404);
+      d.a_rembourser = d.a_rembourser === 1 ? 2 : 1;
+      enregistrer(); return json({ ok: true, rembourse: d.a_rembourser === 2 });
     }],
     ["GET", /^\/api\/remboursements$/, () => json(aRembourser(db.depenses))],
     ["GET", /^\/api\/suggestions$/, () => json([...new Set(db.depenses.map((d) => d.element))].sort(nocase))],
@@ -330,12 +395,13 @@
 
     ["GET", /^\/api\/revenus\/([^/]+)$/, (m) => json(tri(db.revenus.filter((r) => r.mois === m[1]), ["date_revenu", 1]))],
     ["POST", /^\/api\/revenus$/, (m, q, b) => {
-      ajouterRevenu(b);
+      ajouterRevenu(Object.assign({ mois: lireMois(b && b.mois) }, lireRevenu(b)));
       enregistrer(); return json({ ok: true });
     }],
     ["PUT", /^\/api\/revenus\/(\d+)$/, (m, q, b) => {
       const r = db.revenus.find((x) => x.id === Number(m[1]));
-      if (r) Object.assign(r, champsRevenu(b));
+      const v = lireRevenu(b);
+      if (r) Object.assign(r, v);
       enregistrer(); return json({ ok: true });
     }],
 
@@ -358,7 +424,7 @@
     }],
 
     ["GET", /^\/api\/avoirs$/, () => json({ solde: solde() })],
-    ["PUT", /^\/api\/avoirs$/, (m, q, b) => { db.avoirs = { solde_saisi: Number(b.solde), net_ref: net() }; enregistrer(); return json({ ok: true }); }],
+    ["PUT", /^\/api\/avoirs$/, (m, q, b) => { db.avoirs = { solde_saisi: lireMontant((b || {}).solde), net_ref: net() }; enregistrer(); return json({ ok: true }); }],
     ["GET", /^\/api\/prevision$/, () => {
       const t = new Date(), mois = moisCourant();
       const variables = somme(db.depenses.filter((d) => d.mois === mois && d.categorie === "variable"));
@@ -399,8 +465,9 @@
     ["GET", /^\/api\/budgets$/, () => json(db.budgets)],
     ["PUT", /^\/api\/budgets$/, (m, q, b) => {
       Object.entries(b || {}).forEach(([typ, montant]) => {
-        if (montant === null || montant === "" || Number(montant) <= 0) delete db.budgets[typ];
-        else db.budgets[typ] = Number(montant);
+        if (!TYPES.has(typ)) return;
+        if (montant === null || montant === "" || lireMontant(montant) <= 0) delete db.budgets[typ];
+        else db.budgets[typ] = lireMontant(montant);
       });
       enregistrer(); return json({ ok: true });
     }],
@@ -411,7 +478,8 @@
       const compte = new Map();
       db.depenses.forEach((d) => { const k = JSON.stringify([d.element, d.type_depense]); compte.set(k, (compte.get(k) || 0) + 1); });
       const historique = [...compte].sort((a, c) => c[1] - a[1]).map(([k]) => JSON.parse(k));
-      return json(window.Dictee.analyser((b || {}).texte || "", (b || {}).mois, historique));
+      const mois = RE_MOIS.test((b || {}).mois) ? b.mois : null;
+      return json(window.Dictee.analyser(String((b || {}).texte || "").slice(0, 20000), mois, historique));
     }],
 
     ["GET", /^\/api\/export\/csv$/, () => fichier(csv(), `mes_comptes_${new Date().toISOString().slice(0, 10)}.csv`)],
@@ -432,14 +500,14 @@
       if (!d || !Array.isArray(d.depenses) || !Array.isArray(d.revenus)) {
         return json({ ok: false, erreur: "Ce fichier n'est pas une sauvegarde de Mes Comptes." }, 400);
       }
-      const ancien = db;
+      const ancien = db, propre = assainir(d);
       try {
-        db = normaliser(d); enregistrer();          // si l'écriture échoue, le stockage garde l'ancienne version
+        db = normaliser(propre.donnees); enregistrer();   // si l'écriture échoue, le stockage garde l'ancienne version
       } catch (e) {
         db = ancien;
         return json({ ok: false, erreur: "Restauration impossible : le stockage du navigateur est plein." }, 500);
       }
-      return json({ ok: true, depenses: db.depenses.length, revenus: db.revenus.length });
+      return json({ ok: true, depenses: db.depenses.length, revenus: db.revenus.length, ignorees: propre.ignorees });
     }],
   ];
 
@@ -456,7 +524,12 @@
       if (m && meth === methode) {
         let corps = null;
         if (options && typeof options.body === "string") { try { corps = JSON.parse(options.body); } catch (e) { corps = null; } }
-        return action(m, url.searchParams, corps);      // une erreur d'enregistrement rejette la promesse
+        try {
+          return await action(m, url.searchParams, corps);   // une erreur d'enregistrement rejette la promesse
+        } catch (e) {
+          if (e instanceof Invalide) return json({ ok: false, erreur: e.message }, 400);
+          throw e;
+        }
       }
     }
     return json({ erreur: "introuvable" }, 404);

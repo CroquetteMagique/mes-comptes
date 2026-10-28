@@ -69,6 +69,7 @@
   // Arrondi à 2 décimales exactement comme round(x, 2) de Python : sur la valeur
   // réellement stockée (2,675 vaut 2,67499…), et demi exact -> chiffre pair.
   function arrondi(x) {
+    if (!Number.isFinite(x) || Math.abs(x) >= 1e15) return x;   // comme round() de Python (NaN, infini, très grands nombres)
     const [ent, dec] = Math.abs(x).toFixed(20).split(".");
     let cents = Number(ent) * 100 + Number(dec.slice(0, 2));
     const suite = dec.slice(2), demi = "5" + "0".repeat(suite.length - 1);
@@ -444,7 +445,7 @@
     return { depenses, non_compris: nonCompris };
   }
 
-  const api = { analyser, devinerType, arrondi };
+  const api = { analyser, devinerType, arrondi, TYPES: Object.keys(MOTS_CLES).concat("autre") };
   racine.Dictee = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

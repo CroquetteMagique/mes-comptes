@@ -11,8 +11,10 @@ from flask import Flask, render_template, request, jsonify, g, send_file, Respon
 from fpdf import FPDF
 import io
 import json
+import math
+import re
 
-from dictee import analyser
+from dictee import analyser, MOTS_CLES
 import mise_a_jour
 
 
@@ -39,7 +41,118 @@ def _find_arial():
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024     # aucune requête de l'appli n'approche cette taille
 DB_PATH = os.path.join(os.path.dirname(__file__), "comptes.db")
+
+
+# ── Sécurité ───────────────────────────────────────────────────────────────────
+# Le serveur n'écoute que sur 127.0.0.1, mais une page web ouverte dans le même
+# navigateur peut quand même lui envoyer des requêtes :
+# - DNS rebinding : un faux nom de domaine qui pointe sur 127.0.0.1 permettrait de
+#   lire les comptes -> seuls les noms d'hôte locaux sont servis ;
+# - CSRF : un autre site déclencherait une écriture -> refusée si elle vient d'ailleurs.
+HOTES_LOCAUX = {"127.0.0.1", "localhost"}
+CSP = ("default-src 'self'; "
+       "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; "
+       "img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; "
+       "form-action 'self'; frame-ancestors 'none'")
+
+
+@app.before_request
+def _protection():
+    if request.host.rsplit(":", 1)[0] not in HOTES_LOCAUX:
+        return "Hôte non autorisé", 403
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        site, origine = request.headers.get("Sec-Fetch-Site"), request.headers.get("Origin")
+        if (site and site not in ("same-origin", "none")) or (origine and origine != request.host_url.rstrip("/")):
+            return "Requête d'un autre site refusée", 403
+
+
+@app.after_request
+def _entetes(r):
+    r.headers.setdefault("Content-Security-Policy", CSP)
+    r.headers["X-Content-Type-Options"] = "nosniff"
+    r.headers["X-Frame-Options"] = "DENY"
+    r.headers["Referrer-Policy"] = "no-referrer"
+    return r
+
+
+# ── Validation des données reçues ──────────────────────────────────────────────
+
+TYPES = set(MOTS_CLES) | {"autre"}
+RE_MOIS = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
+RE_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+class Invalide(ValueError):
+    """Donnée reçue refusée : réponse 400 avec un message lisible."""
+
+
+@app.errorhandler(Invalide)
+def _invalide(e):
+    return jsonify({"ok": False, "erreur": str(e)}), 400
+
+
+def _corps():
+    d = request.get_json(silent=True)
+    if not isinstance(d, dict):
+        raise Invalide("Données illisibles.")
+    return d
+
+
+def _mois(v):
+    if not isinstance(v, str) or not RE_MOIS.fullmatch(v):
+        raise Invalide("Mois invalide.")
+    return v
+
+
+def _date(v):
+    if v in (None, ""):
+        return None
+    try:
+        if isinstance(v, str) and RE_DATE.fullmatch(v):
+            datetime.strptime(v, "%Y-%m-%d")
+            return v
+    except ValueError:
+        pass
+    raise Invalide("Date invalide.")
+
+
+def _montant(v):
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        raise Invalide("Montant invalide.")
+    if not math.isfinite(x) or abs(x) > 1e9:
+        raise Invalide("Montant invalide.")
+    return x
+
+
+def _texte(v, longueur, requis=True):
+    s = str(v if v is not None else "").strip()[:longueur]
+    if requis and not s:
+        raise Invalide("Nom manquant.")
+    return s
+
+
+def _lire_depense(d):
+    if d.get("categorie") not in ("fixe", "variable"):
+        raise Invalide("Catégorie invalide.")
+    remb = d.get("a_rembourser") or 0
+    if remb not in (0, 1, 2):
+        raise Invalide("Statut de remboursement invalide.")
+    v = {"mois": _mois(d.get("mois")), "categorie": d["categorie"], "element": _texte(d.get("element"), 200),
+         "date_echeance": _date(d.get("date_echeance")), "montant": _montant(d.get("montant")),
+         "a_rembourser": remb, "type_depense": d.get("type_depense") if d.get("type_depense") in TYPES else "autre",
+         "personne": _texte(d.get("personne"), 60, requis=False)}
+    v["personne"] = _personne(v)
+    return v
+
+
+def _lire_revenu(d):
+    return {"element": _texte(d.get("element"), 200), "date_revenu": _date(d.get("date_revenu")),
+            "montant": _montant(d.get("montant")), "fixe": 1 if d.get("fixe") else 0}
 
 last_ping = time.time()
 fermeture = None          # moment où la page a signalé sa fermeture (/bye)
@@ -241,11 +354,11 @@ def _personne(d):
 
 @app.route("/api/depenses", methods=["POST"])
 def add_depense():
-    d = request.json
+    v = _lire_depense(_corps())
     db = get_db()
     db.execute(
         "INSERT INTO depenses (mois, categorie, element, date_echeance, montant, a_rembourser, type_depense, personne) VALUES (?,?,?,?,?,?,?,?)",
-        (d["mois"], d["categorie"], d["element"], d.get("date_echeance"), float(d["montant"]), int(d.get("a_rembourser", 0)), d.get("type_depense", "autre"), _personne(d))
+        (v["mois"], v["categorie"], v["element"], v["date_echeance"], v["montant"], v["a_rembourser"], v["type_depense"], v["personne"])
     )
     db.commit()
     return jsonify({"ok": True})
@@ -289,6 +402,8 @@ def toggle_rembourse(dep_id):
     db = get_db()
     # On marque comme remboursé en mettant a_rembourser à 2 (remboursé) ou 1 (en attente)
     cur = db.execute("SELECT a_rembourser FROM depenses WHERE id=?", (dep_id,)).fetchone()
+    if cur is None:
+        return jsonify({"ok": False, "erreur": "Dépense introuvable."}), 404
     nouveau = 2 if cur[0] == 1 else 1
     db.execute("UPDATE depenses SET a_rembourser=? WHERE id=?", (nouveau, dep_id))
     db.commit()
@@ -307,11 +422,12 @@ def delete_depense(dep_id):
 
 @app.route("/api/depenses/<int:dep_id>", methods=["PUT"])
 def update_depense(dep_id):
-    d = request.json
+    d = _corps()
+    v = _lire_depense(dict(d, mois=d.get("mois") or "2000-01"))       # le mois ne change pas en modification
     db = get_db()
     db.execute(
         "UPDATE depenses SET element=?, date_echeance=?, montant=?, categorie=?, a_rembourser=?, type_depense=?, personne=? WHERE id=?",
-        (d["element"], d.get("date_echeance"), float(d["montant"]), d["categorie"], int(d.get("a_rembourser", 0)), d.get("type_depense", "autre"), _personne(d), dep_id)
+        (v["element"], v["date_echeance"], v["montant"], v["categorie"], v["a_rembourser"], v["type_depense"], v["personne"], dep_id)
     )
     db.commit()
     return jsonify({"ok": True})
@@ -335,11 +451,12 @@ def get_revenus(mois):
 
 @app.route("/api/revenus", methods=["POST"])
 def add_revenu():
-    d = request.json
+    d = _corps()
+    v = _lire_revenu(d)
     db = get_db()
     db.execute(
         "INSERT INTO revenus (mois, element, date_revenu, montant, fixe) VALUES (?,?,?,?,?)",
-        (d["mois"], d["element"], d.get("date_revenu"), float(d["montant"]), int(d.get("fixe") or 0))
+        (_mois(d.get("mois")), v["element"], v["date_revenu"], v["montant"], v["fixe"])
     )
     db.commit()
     return jsonify({"ok": True})
@@ -347,11 +464,11 @@ def add_revenu():
 
 @app.route("/api/revenus/<int:rev_id>", methods=["PUT"])
 def update_revenu(rev_id):
-    d = request.json
+    v = _lire_revenu(_corps())
     db = get_db()
     db.execute(
         "UPDATE revenus SET element=?, date_revenu=?, montant=?, fixe=? WHERE id=?",
-        (d["element"], d.get("date_revenu"), float(d["montant"]), int(d.get("fixe") or 0), rev_id)
+        (v["element"], v["date_revenu"], v["montant"], v["fixe"], rev_id)
     )
     db.commit()
     return jsonify({"ok": True})
@@ -443,11 +560,11 @@ def get_avoirs():
 
 @app.route("/api/avoirs", methods=["PUT"])
 def update_avoirs():
-    d = request.json
+    solde = _montant(_corps().get("solde"))
     db = get_db()
     db.execute(
         "INSERT OR REPLACE INTO avoirs (id, solde_saisi, net_ref) VALUES (1, ?, ?)",
-        (float(d["solde"]), _net(db))
+        (solde, _net(db))
     )
     db.commit()
     return jsonify({"ok": True})
@@ -542,8 +659,10 @@ def get_budgets():
 def update_budgets():
     """{type: montant} ; un montant vide ou nul retire le budget."""
     db = get_db()
-    for typ, montant in (request.json or {}).items():
-        if montant in (None, "") or float(montant) <= 0:
+    for typ, montant in _corps().items():
+        if typ not in TYPES:
+            continue
+        if montant in (None, "") or _montant(montant) <= 0:
             db.execute("DELETE FROM budgets WHERE type=?", (typ,))
         else:
             db.execute("INSERT OR REPLACE INTO budgets (type, montant) VALUES (?, ?)", (typ, float(montant)))
@@ -566,12 +685,13 @@ def get_budgets_mois(mois):
 @app.route("/api/dictee", methods=["POST"])
 def post_dictee():
     """Transforme un texte dicté en liste de dépenses à vérifier (rien n'est enregistré ici)."""
-    d = request.json or {}
+    d = _corps()
+    mois = d.get("mois") if isinstance(d.get("mois"), str) and RE_MOIS.fullmatch(d["mois"]) else None
     historique = get_db().execute("""
         SELECT element, type_depense FROM depenses
         GROUP BY element, type_depense ORDER BY COUNT(*) DESC
     """).fetchall()
-    return jsonify(analyser(d.get("texte", ""), d.get("mois"), [tuple(r) for r in historique]))
+    return jsonify(analyser(str(d.get("texte") or "")[:20000], mois, [tuple(r) for r in historique]))
 
 
 # ── Export pour Excel ──────────────────────────────────────────────────────────
@@ -585,11 +705,13 @@ def export_csv():
     w.writerow(["Sens", "Mois", "Date", "Élément", "Catégorie", "Type", "Montant", "À rembourser", "Personne"])
     statut = {0: "", 1: "En attente", 2: "Remboursé"}
     euro = lambda n: f"{n:.2f}".replace(".", ",")
+    # Une cellule qui commence par = + - @ serait exécutée comme une formule par Excel
+    texte = lambda s: "'" + s if s and s[0] in "=+-@\t\r" else (s or "")
     for r in db.execute("SELECT * FROM depenses ORDER BY mois, date_echeance"):
-        w.writerow(["Dépense", r["mois"], r["date_echeance"] or "", r["element"], r["categorie"],
-                    r["type_depense"] or "", euro(r["montant"]), statut.get(r["a_rembourser"], ""), r["personne"] or ""])
+        w.writerow(["Dépense", r["mois"], r["date_echeance"] or "", texte(r["element"]), r["categorie"],
+                    r["type_depense"] or "", euro(r["montant"]), statut.get(r["a_rembourser"], ""), texte(r["personne"])])
     for r in db.execute("SELECT * FROM revenus ORDER BY mois, date_revenu"):
-        w.writerow(["Revenu", r["mois"], r["date_revenu"] or "", r["element"], "", "", euro(r["montant"]), "", ""])
+        w.writerow(["Revenu", r["mois"], r["date_revenu"] or "", texte(r["element"]), "", "", euro(r["montant"]), "", ""])
     return Response("﻿" + buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=mes_comptes_{date.today().isoformat()}.csv"})
 
@@ -598,6 +720,7 @@ def export_csv():
 
 @app.route("/api/export/pdf/<mois>")
 def export_pdf(mois):
+    _mois(mois)
     db  = get_db()
     dep = db.execute("SELECT * FROM depenses WHERE mois=? ORDER BY categorie, date_echeance", (mois,)).fetchall()
     rev = db.execute("SELECT * FROM revenus WHERE mois=? ORDER BY date_revenu", (mois,)).fetchall()
@@ -758,6 +881,8 @@ def export_pdf(mois):
 @app.route("/api/export/pdf/remboursements")
 @app.route("/api/export/pdf/remboursements/<mois_filtre>")
 def export_pdf_remboursements(mois_filtre=None):
+    if mois_filtre:
+        _mois(mois_filtre)
     db  = get_db()
     personne = request.args.get("personne") or None
     sql, params = "SELECT * FROM depenses WHERE a_rembourser >= 1", []

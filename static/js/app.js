@@ -134,7 +134,7 @@ const fmt = (n) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n ?? 0);
 
 const fmtDate = (s) => {
-  if (!s) return "—";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s || "")) return "—";
   const [y, m, d] = s.split("-");
   return `${d}/${m}/${y}`;
 };
@@ -460,7 +460,7 @@ async function openBudgets() {
     <label class="budget-input">
       <span>${TYPE_LABELS[t]}</span>
       <span class="budget-field">
-        <input type="number" min="0" step="1" inputmode="decimal" data-type="${t}" value="${actuels[t] ?? ""}" placeholder="—">
+        <input type="number" min="0" step="1" inputmode="decimal" data-type="${t}" value="${esc(actuels[t] ?? "")}" placeholder="—">
         <span>€</span>
       </span>
     </label>`).join("");
@@ -546,13 +546,13 @@ function renderDepTable(id, rows, showRembours) {
   rows.forEach((d) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${esc(d.element)} <span class="type-tag type-${d.type_depense || 'autre'}">${typeLabel(d.type_depense)}</span></td>
+      <td>${esc(d.element)} <span class="type-tag type-${TYPE_LABELS[d.type_depense] ? d.type_depense : "autre"}">${typeLabel(d.type_depense)}</span></td>
       <td>${fmtDate(d.date_echeance)}</td>
       <td class="amount">${fmt(d.montant)}</td>
       ${showRembours ? `<td>${d.a_rembourser ? `<span class="badge badge-rembours">À rembourser${d.personne ? " par " + esc(d.personne) : ""}</span>` : ''}</td>` : ""}
       <td>
-        <button class="btn-icon" title="Modifier" aria-label="Modifier ${esc(d.element)}" onclick="editDepense(${d.id})">${icon("edit")}</button>
-        <button class="btn-icon btn-icon--danger" title="Supprimer" aria-label="Supprimer ${esc(d.element)}" onclick="deleteDepense(${d.id})">${icon("trash")}</button>
+        <button class="btn-icon" title="Modifier" aria-label="Modifier ${esc(d.element)}" onclick="editDepense(${Number(d.id)})">${icon("edit")}</button>
+        <button class="btn-icon btn-icon--danger" title="Supprimer" aria-label="Supprimer ${esc(d.element)}" onclick="deleteDepense(${Number(d.id)})">${icon("trash")}</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -683,7 +683,8 @@ async function editDepense(id) {
   document.getElementById("dep-date").value        = d.date_echeance || "";
   document.getElementById("dep-montant").value    = d.montant;
   document.getElementById("dep-rembours").checked = !!d.a_rembourser;
-  selectType(d.type_depense || "autre", document.querySelector(`[data-type="${d.type_depense || 'autre'}"]`));
+  const typ = TYPE_LABELS[d.type_depense] ? d.type_depense : "autre";
+  selectType(typ, document.querySelector(`[data-type="${typ}"]`));
   document.getElementById("dep-cat-forced").value = "";
   document.getElementById("form-group-categorie").style.display = "block";
   document.getElementById("modal-dep-title").textContent = "Modifier la dépense";
@@ -744,8 +745,8 @@ async function runSearch() {
       <td>${fmtDate(d.date_echeance)}</td>
       <td class="amount">${fmt(d.montant)}</td>
       <td>
-        <button class="btn-icon" title="Modifier" aria-label="Modifier ${esc(d.element)}" onclick="editDepense(${d.id})">${icon("edit")}</button>
-        <button class="btn-icon btn-icon--danger" title="Supprimer" aria-label="Supprimer ${esc(d.element)}" onclick="deleteDepense(${d.id})">${icon("trash")}</button>
+        <button class="btn-icon" title="Modifier" aria-label="Modifier ${esc(d.element)}" onclick="editDepense(${Number(d.id)})">${icon("edit")}</button>
+        <button class="btn-icon btn-icon--danger" title="Supprimer" aria-label="Supprimer ${esc(d.element)}" onclick="deleteDepense(${Number(d.id)})">${icon("trash")}</button>
       </td>
     </tr>`).join("");
 }
@@ -807,7 +808,7 @@ function renderRemboursements() {
         <td>${fmtDate(d.date_echeance)}</td>
         <td class="amount">${fmt(d.montant)}</td>
         <td><span class="badge ${rembourse ? "badge-green" : "badge-orange"}">${rembourse ? "Remboursé" : "En attente"}</span></td>
-        <td><button class="btn-icon ${rembourse ? "" : "btn-icon--ok"}" title="${action}" aria-label="${action}" onclick="toggleRembourse(${d.id})">${icon(rembourse ? "undo" : "check")}</button></td>
+        <td><button class="btn-icon ${rembourse ? "" : "btn-icon--ok"}" title="${action}" aria-label="${action}" onclick="toggleRembourse(${Number(d.id)})">${icon(rembourse ? "undo" : "check")}</button></td>
       </tr>`;
   };
   liste.innerHTML = Object.keys(parMois).sort((a, b) => b.localeCompare(a)).map((mois) => {
@@ -823,8 +824,8 @@ function renderRemboursements() {
         </div>
         <div class="rembours-mois-actions">
           <strong class="rembours-mois-total">${fmt(total)}</strong>
-          <button class="btn-pdf btn-pdf--sm" onclick="downloadPDFRemboursementsMois('${mois}')">${icon("download")} PDF</button>
-          <button class="btn-pdf btn-pdf--sm btn-pdf--share" onclick="sharePDFRemboursements('${mois}')" title="Envoyer par WhatsApp" aria-label="Envoyer par WhatsApp">${icon("share")}</button>
+          <button class="btn-pdf btn-pdf--sm" onclick="downloadPDFRemboursementsMois(${esc(JSON.stringify(mois))})">${icon("download")} PDF</button>
+          <button class="btn-pdf btn-pdf--sm btn-pdf--share" onclick="sharePDFRemboursements(${esc(JSON.stringify(mois))})" title="Envoyer par WhatsApp" aria-label="Envoyer par WhatsApp">${icon("share")}</button>
         </div>
       </header>
       <table class="table"><tbody>${items.map(ligne).join("")}</tbody></table>
@@ -869,8 +870,8 @@ async function loadRevenus() {
       <td>${fmtDate(r.date_revenu)}</td>
       <td class="amount">${fmt(r.montant)}</td>
       <td>
-        <button class="btn-icon" title="Modifier" aria-label="Modifier ${esc(r.element)}" onclick="editRevenu(${r.id})">${icon("edit")}</button>
-        <button class="btn-icon btn-icon--danger" title="Supprimer" aria-label="Supprimer ${esc(r.element)}" onclick="deleteRevenu(${r.id})">${icon("trash")}</button>
+        <button class="btn-icon" title="Modifier" aria-label="Modifier ${esc(r.element)}" onclick="editRevenu(${Number(r.id)})">${icon("edit")}</button>
+        <button class="btn-icon btn-icon--danger" title="Supprimer" aria-label="Supprimer ${esc(r.element)}" onclick="deleteRevenu(${Number(r.id)})">${icon("trash")}</button>
       </td>
     </tr>`).join("") : `<tr class="empty-row"><td colspan="4">${vide}</td></tr>`;
   document.getElementById("list-revenus").innerHTML =
@@ -1067,7 +1068,7 @@ function renderDicteeListe() {
     <div class="dictee-row" data-i="${i}">
       <input class="dr-element" aria-label="Élément" value="${esc(d.element === "?" ? "" : d.element)}" placeholder="Élément">
       <span class="dr-montant"><input type="number" step="0.01" aria-label="Montant" value="${(+d.montant).toFixed(2)}"><span>€</span></span>
-      <input class="dr-date" type="date" aria-label="Date" value="${d.date_echeance || ""}">${champs(d)}
+      <input class="dr-date" type="date" aria-label="Date" value="${esc(d.date_echeance || "")}">${champs(d)}
       <button class="btn-icon btn-icon--danger dr-suppr" title="Retirer cette ligne" aria-label="Retirer cette ligne" onclick="retirerDictee(${i})">${icon("x")}</button>
     </div>`).join("");
   const n = dicteeItems.length;
@@ -1179,7 +1180,8 @@ function restaurerDonnees() {
     const r = await fetch("/api/restauration", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(contenu) });
     const rep = await r.json();
     if (!rep.ok) return toast(rep.erreur);
-    toast(`Sauvegarde restaurée : ${rep.depenses} dépenses, ${rep.revenus} revenus.`);
+    toast(`Sauvegarde restaurée : ${rep.depenses} dépenses, ${rep.revenus} revenus.`
+      + (rep.ignorees ? ` ${rep.ignorees} ligne(s) invalide(s) ignorée(s).` : ""));
     currentMois = "";
     await loadMois();
     refreshActive();

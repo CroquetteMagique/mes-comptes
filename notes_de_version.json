@@ -1,5 +1,15 @@
 [
   {
+    "id": "2026-10-28.5",
+    "titre": "Sécurité renforcée",
+    "points": [
+      "L'appli est mieux protégée contre les pages web malveillantes : elles ne peuvent plus lire ni modifier vos comptes.",
+      "Une sauvegarde importée est vérifiée ligne par ligne ; les lignes invalides sont ignorées et signalées.",
+      "Les exports Excel ne peuvent plus contenir de formules piégées.",
+      "Bibliothèques mises à jour (création des PDF, serveur de l'appli)."
+    ]
+  },
+  {
     "id": "2026-10-28.4",
     "titre": "Affichage plus large et centré",
     "points": [
