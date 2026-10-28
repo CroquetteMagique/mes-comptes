@@ -877,7 +877,19 @@ def ouvrir_navigateur(url):
     webbrowser.open(url)
 
 
+def deja_lancee():
+    """Vrai si l'appli tourne déjà (Windows laisserait démarrer un second serveur sur le même port)."""
+    import socket
+    with socket.socket() as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", PORT)) == 0
+
+
 if __name__ == "__main__":
+    # Déjà ouverte : rouvrir la fenêtre, sans mise à jour ni second serveur
+    if deja_lancee():
+        ouvrir_navigateur(f"http://127.0.0.1:{PORT}")
+        raise SystemExit
     # Mise à jour depuis GitHub avant de démarrer (jamais pendant que l'appli tourne)
     if mise_a_jour.appliquer():
         mise_a_jour.relancer()
