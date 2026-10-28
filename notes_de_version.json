@@ -1,5 +1,13 @@
 [
   {
+    "id": "2026-10-28.4",
+    "titre": "Affichage plus large et centré",
+    "points": [
+      "Sur les grands écrans, la page est maintenant centrée et plus large.",
+      "Barre de défilement plus discrète, dorée au survol."
+    ]
+  },
+  {
     "id": "2026-10-28.3",
     "titre": "Revenus fixes et dictée des revenus",
     "points": [

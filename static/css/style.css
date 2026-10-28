@@ -143,10 +143,18 @@ nav { display: flex; flex-direction: column; gap: 2px; }
 .content {
   margin-left: var(--sidebar);
   padding: 2.5rem clamp(1.5rem, 4vw, 3.5rem) 4rem;
-  max-width: calc(1180px + var(--sidebar));
 }
 
-.tab { display: none; }
+/* Contenu centré dans l'espace à droite du menu, sur une largeur confortable */
+.tab { display: none; max-width: 1440px; margin-inline: auto; }
+
+/* Barre de défilement fine et sombre, dorée au survol */
+:root { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--ink); }
+::-webkit-scrollbar-button { display: none; }
 .tab.active { display: block; animation: tabIn .25s ease-out both; }
 @keyframes tabIn { from { opacity: 0; } to { opacity: 1; } }
 
