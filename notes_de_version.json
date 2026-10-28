@@ -1,10 +1,12 @@
 [
   {
-    "id": "2026-10-28.2",
-    "titre": "Note de test",
+    "id": "2026-10-28.3",
+    "titre": "Revenus fixes et dictée des revenus",
     "points": [
-      "Ceci est une note de test : si vous la voyez, les mises à jour automatiques fonctionnent.",
-      "Rien ne change dans l'appli ni dans vos données."
+      "Revenus fixes : un salaire, une bourse ou une allocation marqué « fixe » est recopié automatiquement chaque mois, comme les charges fixes.",
+      "Onglet Revenus : nouveau bouton « Dicter ». Dites par exemple « Le 5, salaire, 1500 euros » ; les salaires et allocations sont cochés « fixe » d'office.",
+      "Un revenu se modifie maintenant avec le crayon, par exemple pour passer votre salaire en revenu fixe.",
+      "La dictée comprend aussi « j'ai reçu 50 euros de… » et « j'ai touché ma paie… »."
     ]
   },
   {

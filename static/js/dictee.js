@@ -27,7 +27,8 @@
   const BORDS = new Set(["de", "d'", "du", "des", "le", "la", "les", "l'", "un", "une", "a", "au", "aux", "pour", "donc",
     "ca", "en", "dans", "sur", "chez", "c'est", "tout", "j'", "j'ai", "ai", "on", "il", "elle",
     "paye", "payer", "depense", "depenses", "achete", "acheter", "pris", "mis", "fait", "coute",
-    "me", "m'", "moi", "suis", "y", "avec", "par"]);
+    "me", "m'", "moi", "suis", "y", "avec", "par",
+    "recu", "touche", "percu", "gagne", "ma", "mon", "mes"]);
 
   const MOTS_CLES = {
     nourriture: ["intermarche", "carrefour", "lidl", "leclerc", "auchan", "aldi", "monoprix", "franprix",

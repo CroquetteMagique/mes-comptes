@@ -132,8 +132,27 @@
     });
   }
 
+  function ajouterRevenu(r) {
+    db.seq.revenus += 1;
+    db.revenus.push({ id: db.seq.revenus, mois: r.mois, element: r.element, date_revenu: r.date_revenu || null,
+      montant: Number(r.montant), fixe: Number(r.fixe || 0), created_at: new Date().toISOString() });
+  }
+
+  // Revenus fixes du dernier mois saisi, copiés une seule fois par mois (comme app.py)
+  function copierRevenusFixes() {
+    const m = moisCourant();
+    if (db.reglages.revenus_fixes_mois === m) return;
+    const prec = db.revenus.filter((r) => r.mois < m).map((r) => r.mois).sort().pop();
+    const fixes = prec && !db.revenus.some((r) => r.mois === m && r.fixe)
+      ? db.revenus.filter((r) => r.mois === prec && r.fixe) : [];
+    fixes.forEach((r) => ajouterRevenu({ mois: m, element: r.element, montant: r.montant, fixe: 1 }));
+    db.reglages.revenus_fixes_mois = m;
+    enregistrer(fixes.length > 0);
+  }
+
   // Création du mois en cours, avec copie des charges fixes du dernier mois saisi (comme app.py)
   function creerMoisCourant() {
+    copierRevenusFixes();
     const m = moisCourant();
     if (db.depenses.some((d) => d.mois === m)) return;
     const prec = db.depenses.filter((d) => d.mois < m).map((d) => d.mois).sort().pop();
@@ -311,9 +330,12 @@
 
     ["GET", /^\/api\/revenus\/([^/]+)$/, (m) => json(tri(db.revenus.filter((r) => r.mois === m[1]), ["date_revenu", 1]))],
     ["POST", /^\/api\/revenus$/, (m, q, b) => {
-      db.seq.revenus += 1;
-      db.revenus.push({ id: db.seq.revenus, mois: b.mois, element: b.element, date_revenu: b.date_revenu || null,
-        montant: Number(b.montant), created_at: new Date().toISOString() });
+      ajouterRevenu(b);
+      enregistrer(); return json({ ok: true });
+    }],
+    ["PUT", /^\/api\/revenus\/(\d+)$/, (m, q, b) => {
+      const r = db.revenus.find((x) => x.id === Number(m[1]));
+      if (r) Object.assign(r, { element: b.element, date_revenu: b.date_revenu || null, montant: Number(b.montant), fixe: Number(b.fixe || 0) });
       enregistrer(); return json({ ok: true });
     }],
 

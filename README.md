@@ -18,7 +18,8 @@ Sans compte, sans abonnement, sans publicité : vos données restent sur votre a
 
 **Et aussi**
 - **Budgets par catégorie**, avec une barre qui passe à l'orange puis au rouge.
-- **Charges fixes** (loyer, abonnements…) recopiées automatiquement chaque mois.
+- **Charges et revenus fixes** (loyer, abonnements, salaire, bourse…) recopiés automatiquement chaque mois.
+- **Dictée des revenus** aussi : « Le 5, salaire, 1500 euros. »
 - **Recherche** sur tous les mois, par nom, personne ou catégorie.
 - **Exports** PDF du mois et Excel de toutes les données.
 - **Annuler** après une suppression.

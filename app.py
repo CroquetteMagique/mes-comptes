@@ -146,10 +146,13 @@ def init_db():
         db.execute("ALTER TABLE depenses ADD COLUMN type_depense TEXT DEFAULT 'autre'")
     if "personne" not in cols:
         db.execute("ALTER TABLE depenses ADD COLUMN personne TEXT")
+    if "fixe" not in [r[1] for r in db.execute("PRAGMA table_info(revenus)").fetchall()]:
+        db.execute("ALTER TABLE revenus ADD COLUMN fixe INTEGER DEFAULT 0")
     db.execute("UPDATE depenses SET a_rembourser = 0 WHERE a_rembourser IS NULL")
     db.execute("UPDATE depenses SET type_depense = 'autre' WHERE type_depense IS NULL")
     db.commit()
     _auto_create_current_month(db)
+    _copier_revenus_fixes(db)
     db.close()
 
 
@@ -177,6 +180,21 @@ def _auto_create_current_month(db):
             "INSERT INTO depenses (mois, categorie, element, date_echeance, montant, a_rembourser) VALUES (?,?,?,?,?,?)",
             (mois_actuel, "fixe", f[0], None, f[1], 0)
         )
+    db.commit()
+
+
+def _copier_revenus_fixes(db):
+    """Le mois en cours reprend les revenus fixes (salaire…) du dernier mois saisi.
+    Une seule fois par mois : un revenu fixe supprimé ce mois-ci ne revient pas."""
+    mois_actuel = date.today().strftime("%Y-%m")
+    deja = db.execute("SELECT valeur FROM reglages WHERE cle='revenus_fixes_mois'").fetchone()
+    if deja and deja[0] == mois_actuel:
+        return
+    prec = db.execute("SELECT MAX(mois) FROM revenus WHERE mois<?", (mois_actuel,)).fetchone()[0]
+    if prec and not db.execute("SELECT 1 FROM revenus WHERE mois=? AND fixe=1", (mois_actuel,)).fetchone():
+        db.execute("INSERT INTO revenus (mois, element, montant, fixe) "
+                   "SELECT ?, element, montant, 1 FROM revenus WHERE mois=? AND fixe=1", (mois_actuel, prec))
+    db.execute("INSERT OR REPLACE INTO reglages (cle, valeur) VALUES ('revenus_fixes_mois', ?)", (mois_actuel,))
     db.commit()
 
 
@@ -320,8 +338,20 @@ def add_revenu():
     d = request.json
     db = get_db()
     db.execute(
-        "INSERT INTO revenus (mois, element, date_revenu, montant) VALUES (?,?,?,?)",
-        (d["mois"], d["element"], d.get("date_revenu"), float(d["montant"]))
+        "INSERT INTO revenus (mois, element, date_revenu, montant, fixe) VALUES (?,?,?,?,?)",
+        (d["mois"], d["element"], d.get("date_revenu"), float(d["montant"]), int(d.get("fixe") or 0))
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/revenus/<int:rev_id>", methods=["PUT"])
+def update_revenu(rev_id):
+    d = request.json
+    db = get_db()
+    db.execute(
+        "UPDATE revenus SET element=?, date_revenu=?, montant=?, fixe=? WHERE id=?",
+        (d["element"], d.get("date_revenu"), float(d["montant"]), int(d.get("fixe") or 0), rev_id)
     )
     db.commit()
     return jsonify({"ok": True})

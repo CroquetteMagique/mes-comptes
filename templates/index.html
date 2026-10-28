@@ -305,14 +305,32 @@
 
       <div class="toolbar">
         <h2 class="section-title">Entrées d'argent</h2>
-        <button class="btn-primary" onclick="openModal('modal-revenu')">
-          <svg aria-hidden="true"><use href="#i-plus"/></svg> Ajouter un revenu
-        </button>
+        <div class="header-actions">
+          <button class="btn-secondary" onclick="openDictee('revenu')">
+            <svg aria-hidden="true"><use href="#i-mic"/></svg> Dicter <span class="beta" title="Fonction en test">Bêta</span>
+          </button>
+          <button class="btn-primary" onclick="openModalRev(false)">
+            <svg aria-hidden="true"><use href="#i-plus"/></svg> Ajouter un revenu
+          </button>
+        </div>
       </div>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Élément</th><th>Date</th><th class="num">Montant</th><th class="actions-col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody id="list-revenus"></tbody>
+        </table>
+      </div>
+
+      <div class="toolbar">
+        <h2 class="section-title">Revenus fixes <span class="section-note">recopiés chaque mois</span></h2>
+        <button class="btn-secondary" onclick="openModalRev(true)">
+          <svg aria-hidden="true"><use href="#i-plus"/></svg> Ajouter un revenu fixe
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Élément</th><th>Date</th><th class="num">Montant</th><th class="actions-col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody id="list-revenus-fixes"></tbody>
         </table>
       </div>
       <div class="total-bar">Total des revenus <strong id="total-revenus">0,00 €</strong></div>
@@ -462,7 +480,8 @@
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-rev-title">
       <div class="modal-header">
         <h2 class="modal-title" id="modal-rev-title">Nouveau revenu</h2>
-        <p class="modal-sub">Ajoutez une entrée d'argent</p>
+        <p class="modal-sub" id="modal-rev-sub">Ajoutez une entrée d'argent</p>
+        <input type="hidden" id="rev-edit-id">
       </div>
       <div class="form-group form-group--amount">
         <label for="rev-montant">Montant</label>
@@ -479,6 +498,11 @@
         <label for="rev-date">Date</label>
         <input type="date" id="rev-date">
       </div>
+      <label class="switch">
+        <input type="checkbox" id="rev-fixe">
+        <span class="switch-track" aria-hidden="true"></span>
+        <span>Revenu fixe : recopié chaque mois (salaire, bourse…)</span>
+      </label>
       <p class="form-error" id="rev-error" role="alert"></p>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal('modal-revenu')">Annuler</button>
@@ -491,8 +515,8 @@
   <div class="modal-overlay" id="modal-dictee">
     <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="dictee-title">
       <div class="modal-header">
-        <h2 class="modal-title" id="dictee-title">Dicter des dépenses <span class="beta beta--title">Bêta</span></h2>
-        <p class="modal-sub">Dites par exemple : « 4 septembre, Carrefour, 45 euros 20. Le 6, machine à laver, 3 euros. »</p>
+        <h2 class="modal-title" id="dictee-title">Dicter des <span id="dictee-quoi">dépenses</span> <span class="beta beta--title">Bêta</span></h2>
+        <p class="modal-sub" id="dictee-exemple">Dites par exemple : « 4 septembre, Carrefour, 45 euros 20. Le 6, machine à laver, 3 euros. »</p>
       </div>
 
       <div id="dictee-etape1">

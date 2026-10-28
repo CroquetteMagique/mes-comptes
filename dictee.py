@@ -50,7 +50,8 @@ BRUIT = {"euh", "heu", "hum", "bah", "ben", "bon", "alors", "voila", "ok", "rien
 BORDS = {"de", "d'", "du", "des", "le", "la", "les", "l'", "un", "une", "a", "au", "aux", "pour", "donc",
          "ca", "en", "dans", "sur", "chez", "c'est", "tout", "j'", "j'ai", "ai", "on", "il", "elle",
          "paye", "payer", "depense", "depenses", "achete", "acheter", "pris", "mis", "fait", "coute",
-         "me", "m'", "moi", "suis", "y", "avec", "par"}
+         "me", "m'", "moi", "suis", "y", "avec", "par",
+         "recu", "touche", "percu", "gagne", "ma", "mon", "mes"}
 
 MOTS_CLES = {
     "nourriture": ["intermarche", "carrefour", "lidl", "leclerc", "auchan", "aldi", "monoprix", "franprix",

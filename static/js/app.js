@@ -632,7 +632,11 @@ function closeModal(id) {
     document.getElementById("rev-element").value = "";
     document.getElementById("rev-date").value     = "";
     document.getElementById("rev-montant").value  = "";
+    document.getElementById("rev-fixe").checked   = false;
+    document.getElementById("rev-edit-id").value  = "";
     document.getElementById("rev-error").textContent = "";
+    document.getElementById("modal-rev-title").textContent = "Nouveau revenu";
+    document.getElementById("modal-rev-sub").textContent   = "Ajoutez une entrée d'argent";
   }
 }
 
@@ -848,44 +852,64 @@ async function toggleRembourse(id) {
 
 // ── Revenus ───────────────────────────────────────────────────────────────────
 
+function openModalRev(fixe) {
+  document.getElementById("rev-fixe").checked = fixe;
+  openModal("modal-revenu");
+}
+
+let revenusAffiches = [];
+
+function editRevenu(id) {
+  const r = revenusAffiches.find((x) => x.id === id);
+  if (!r) return;
+  document.getElementById("rev-edit-id").value  = r.id;
+  document.getElementById("rev-element").value  = r.element;
+  document.getElementById("rev-date").value     = r.date_revenu || "";
+  document.getElementById("rev-montant").value  = r.montant;
+  document.getElementById("modal-rev-title").textContent = "Modifier le revenu";
+  document.getElementById("modal-rev-sub").textContent   = r.element;
+  openModalRev(!!r.fixe);
+}
+
 async function loadRevenus() {
   const mois = currentMois;
   const revs  = await fetch(`/api/revenus/${mois}`).then((r) => r.json());
   if (mois !== currentMois) return;   // réponse d'un mois quitté entre-temps : on l'ignore
-  const tbody = document.getElementById("list-revenus");
-  tbody.innerHTML = "";
-  let total = 0;
-  revs.forEach((r) => {
-    total += r.montant;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+  revenusAffiches = revs;
+  const lignes = (rows, vide) => rows.length ? rows.map((r) => `
+    <tr>
       <td>${esc(r.element)}</td>
       <td>${fmtDate(r.date_revenu)}</td>
       <td class="amount">${fmt(r.montant)}</td>
-      <td><button class="btn-icon btn-icon--danger" title="Supprimer" aria-label="Supprimer ${esc(r.element)}" onclick="deleteRevenu(${r.id})">${icon("trash")}</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-  if (revs.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="4">Aucun revenu ce mois-ci. Utilisez « Ajouter un revenu » ci-dessus.</td></tr>`;
-  }
+      <td>
+        <button class="btn-icon" title="Modifier" aria-label="Modifier ${esc(r.element)}" onclick="editRevenu(${r.id})">${icon("edit")}</button>
+        <button class="btn-icon btn-icon--danger" title="Supprimer" aria-label="Supprimer ${esc(r.element)}" onclick="deleteRevenu(${r.id})">${icon("trash")}</button>
+      </td>
+    </tr>`).join("") : `<tr class="empty-row"><td colspan="4">${vide}</td></tr>`;
+  document.getElementById("list-revenus").innerHTML =
+    lignes(revs.filter((r) => !r.fixe), "Aucun revenu ce mois-ci. Utilisez « Ajouter un revenu » ou « Dicter » ci-dessus.");
+  document.getElementById("list-revenus-fixes").innerHTML =
+    lignes(revs.filter((r) => r.fixe), "Aucun revenu fixe. Un salaire ajouté ici revient automatiquement chaque mois.");
+  const total = revs.reduce((s, r) => s + r.montant, 0);
   document.getElementById("total-revenus").textContent     = fmt(total);
   document.getElementById("total-revenus-bar").textContent = fmt(total);
 }
 
 async function saveRevenu() {
+  const id = document.getElementById("rev-edit-id").value;
   const data = {
     mois:        currentMois,
     element:     document.getElementById("rev-element").value.trim(),
     date_revenu: document.getElementById("rev-date").value || null,
     montant:     parseFloat(document.getElementById("rev-montant").value) || 0,
+    fixe:        document.getElementById("rev-fixe").checked ? 1 : 0,
   };
   const err = document.getElementById("rev-error");
   if (!data.montant) return (err.textContent = "Indiquez un montant.");
   if (!data.element) return (err.textContent = "Indiquez l'origine de ce revenu (élément).");
-  await envoyer("/api/revenus", "POST", data);
+  await envoyer(id ? `/api/revenus/${id}` : "/api/revenus", id ? "PUT" : "POST", data);
   closeModal("modal-revenu");
-  toast("Revenu ajouté");
+  toast(id ? "Revenu modifié" : "Revenu ajouté");
   loadRevenus();
 }
 
@@ -909,10 +933,19 @@ async function deleteRevenu(id) {
 let reco = null;
 let ecoute = false;
 let dicteeItems = [];
+let dicteeRevenus = false;   // la dictée remplit les revenus au lieu des dépenses
+const quoiDicte = (n = 2) => (dicteeRevenus ? "revenu" : "dépense") + (n > 1 ? "s" : "");
+// Revenus qui reviennent chaque mois : cochés « fixe » d'office dans la liste à vérifier
+const REVENU_FIXE = /salaire|paie|paye|apl|caf|bourse|pension|allocation|loyer/i;
 
 function dicteeStatus(texte) { document.getElementById("dictee-status").textContent = texte; }
 
-function openDictee() {
+function openDictee(mode) {
+  dicteeRevenus = mode === "revenu";
+  document.getElementById("dictee-quoi").textContent = quoiDicte();
+  document.getElementById("dictee-exemple").textContent = dicteeRevenus
+    ? "Dites par exemple : « Le 5, salaire, 1500 euros. Le 12, virement de Paul, 20 euros. »"
+    : "Dites par exemple : « 4 septembre, Carrefour, 45 euros 20. Le 6, machine à laver, 3 euros. »";
   document.getElementById("dictee-texte").value = "";
   document.getElementById("dictee-error").textContent = "";
   document.getElementById("dictee-etape1").hidden = false;
@@ -1003,7 +1036,7 @@ function toggleMicro() {
   veutEcouter = true;
   demarrer();
   setEcoute(true);
-  dicteeStatus("À l'écoute… Dites la date, ce que vous avez payé et le prix. Appuyez à nouveau sur le micro pour arrêter.");
+  dicteeStatus(`À l'écoute… Dites la date, ${dicteeRevenus ? "ce que vous avez reçu et le montant" : "ce que vous avez payé et le prix"}. Appuyez à nouveau sur le micro pour arrêter.`);
 }
 
 async function analyserDictee() {
@@ -1011,16 +1044,19 @@ async function analyserDictee() {
   if (ecoute) reco.stop();
   const texte = document.getElementById("dictee-texte").value.trim();
   const err = document.getElementById("dictee-error");
-  if (!texte) return (err.textContent = "Dictez ou tapez au moins une dépense.");
+  if (!texte) return (err.textContent = `Dictez ou tapez au moins ${dicteeRevenus ? "un revenu" : "une dépense"}.`);
   const r = await fetch("/api/dictee", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ texte, mois: currentMois }),
   }).then((x) => x.json());
-  if (!r.depenses.length) return (err.textContent = "Aucun montant reconnu. Précisez le prix de chaque dépense, par exemple « 12 euros 50 ».");
+  if (!r.depenses.length) return (err.textContent = `Aucun montant reconnu. Précisez le montant de chaque ${quoiDicte(1)}, par exemple « 12 euros 50 ».`);
   err.textContent = "";
-  dicteeItems = r.depenses;
+  dicteeItems = dicteeRevenus
+    ? r.depenses.map((d) => ({ element: d.element, montant: d.montant, date_echeance: d.date_echeance, mois: d.mois,
+        fixe: REVENU_FIXE.test(d.element) ? 1 : 0 }))
+    : r.depenses;
   document.getElementById("dictee-noncompris").textContent = r.non_compris.length
-    ? `Pas de prix compris pour : « ${r.non_compris.join(" », « ")} ». Ajoutez-le à la main si besoin.` : "";
+    ? `Pas de montant compris pour : « ${r.non_compris.join(" », « ")} ». Ajoutez-le à la main si besoin.` : "";
   renderDicteeListe();
   await loadPersonnes();
   document.getElementById("dictee-etape1").hidden = true;
@@ -1034,17 +1070,18 @@ function renderDicteeListe() {
     <div class="dictee-row" data-i="${i}">
       <input class="dr-element" aria-label="Élément" value="${esc(d.element === "?" ? "" : d.element)}" placeholder="Élément">
       <span class="dr-montant"><input type="number" step="0.01" aria-label="Montant" value="${(+d.montant).toFixed(2)}"><span>€</span></span>
-      <input class="dr-date" type="date" aria-label="Date" value="${d.date_echeance || ""}">
+      <input class="dr-date" type="date" aria-label="Date" value="${d.date_echeance || ""}">${dicteeRevenus ? `
+      <label class="dr-remb dr-fixe"><input type="checkbox" ${d.fixe ? "checked" : ""}> Fixe, recopié chaque mois</label>` : `
       <select class="dr-type" aria-label="Type">${options(d.type_depense)}</select>
       <label class="dr-remb"><input type="checkbox" ${d.a_rembourser ? "checked" : ""} onchange="this.closest('.dictee-row').querySelector('.dr-personne').hidden = !this.checked"> À rembourser</label>
-      <input class="dr-personne" list="personnes-list" aria-label="Qui doit rembourser" placeholder="Par qui ?" value="${esc(d.personne || "")}" ${d.a_rembourser ? "" : "hidden"}>
+      <input class="dr-personne" list="personnes-list" aria-label="Qui doit rembourser" placeholder="Par qui ?" value="${esc(d.personne || "")}" ${d.a_rembourser ? "" : "hidden"}>`}
       <button class="btn-icon btn-icon--danger dr-suppr" title="Retirer cette ligne" aria-label="Retirer cette ligne" onclick="retirerDictee(${i})">${icon("x")}</button>
     </div>`).join("");
   const n = dicteeItems.length;
   const total = dicteeItems.reduce((s, d) => s + (+d.montant || 0), 0);
   document.getElementById("dictee-resume").textContent =
-    `${n} dépense${n > 1 ? "s" : ""} comprise${n > 1 ? "s" : ""}, ${fmt(total)}. Vérifiez et corrigez si besoin.`;
-  document.getElementById("dictee-save").textContent = `Enregistrer ${n} dépense${n > 1 ? "s" : ""}`;
+    `${n} ${quoiDicte(n)} ${dicteeRevenus ? "compris" : n > 1 ? "comprises" : "comprise"}, ${fmt(total)}. Vérifiez et corrigez si besoin.`;
+  document.getElementById("dictee-save").textContent = `Enregistrer ${n} ${quoiDicte(n)}`;
 }
 
 function lireDicteeListe() {
@@ -1053,6 +1090,7 @@ function lireDicteeListe() {
     d.element       = row.querySelector(".dr-element").value.trim();
     d.montant       = parseFloat(row.querySelector(".dr-montant input").value) || 0;
     d.date_echeance = row.querySelector(".dr-date").value || null;
+    if (dicteeRevenus) { d.fixe = row.querySelector(".dr-fixe input").checked ? 1 : 0; return; }
     d.type_depense  = row.querySelector(".dr-type").value;
     d.a_rembourser  = row.querySelector(".dr-remb input").checked ? 1 : 0;
     d.personne      = row.querySelector(".dr-personne").value.trim();
@@ -1078,15 +1116,16 @@ async function enregistrerDictee() {
   if (incomplete >= 0) return (err.textContent = `Ligne ${incomplete + 1} : il manque l'élément ou le montant.`);
   err.textContent = "";
   for (const d of dicteeItems) {
-    await envoyer("/api/depenses", "POST", {
-      ...d,
-      categorie: "variable",
-      mois: d.date_echeance ? d.date_echeance.slice(0, 7) : (d.mois || currentMois),
-    });
+    const mois = d.date_echeance ? d.date_echeance.slice(0, 7) : (d.mois || currentMois);
+    if (dicteeRevenus) {
+      await envoyer("/api/revenus", "POST", { mois, element: d.element, date_revenu: d.date_echeance, montant: d.montant, fixe: d.fixe });
+    } else {
+      await envoyer("/api/depenses", "POST", { ...d, categorie: "variable", mois });
+    }
   }
   const n = dicteeItems.length;
   closeModal("modal-dictee");
-  toast(`${n} dépense${n > 1 ? "s" : ""} ajoutée${n > 1 ? "s" : ""}`);
+  toast(`${n} ${quoiDicte(n)} ajouté${dicteeRevenus ? "" : "e"}${n > 1 ? "s" : ""}`);
   loadMois().then(refreshActive);
 }
 
@@ -1094,7 +1133,7 @@ async function enregistrerDictee() {
 
 document.querySelectorAll(".modal-overlay").forEach((overlay) => {
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.classList.remove("open");
+    if (e.target === overlay) closeModal(overlay.id);   // remet aussi le formulaire à zéro
   });
 });
 
