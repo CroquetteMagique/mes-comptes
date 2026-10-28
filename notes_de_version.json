@@ -1,5 +1,14 @@
 [
   {
+    "id": "2026-10-28.1",
+    "titre": "Sauvegarde automatique (version navigateur)",
+    "points": [
+      "Avec Chrome ou Edge : « Activer la sauvegarde automatique » (en bas à gauche) vous fait choisir un fichier une seule fois, puis il est mis à jour à chaque modification.",
+      "Avec Safari : une sauvegarde est téléchargée automatiquement à l'ouverture, au plus tous les 3 jours et seulement si vos comptes ont changé.",
+      "« Sauvegarder mes données » reste disponible à tout moment."
+    ]
+  },
+  {
     "id": "2026-10-27.2",
     "titre": "Version navigateur, sans installation",
     "points": [

@@ -33,7 +33,7 @@ Sans compte, sans abonnement, sans publicité : vos données restent sur votre a
 |---|---|---|
 | Installation | Aucune : une adresse web | Python et quelques minutes de mise en place |
 | Où sont les données | Dans le navigateur de l'appareil | Dans un fichier sur l'ordinateur (`comptes.db`) |
-| Sauvegardes | Bouton « Sauvegarder mes données » (fichier) | Copie automatique chaque jour |
+| Sauvegardes | Automatiques, dans un fichier (Chrome, Edge) ou dans Téléchargements (Safari) | Copie automatique chaque jour |
 | Fonctionnalités | Toutes | Toutes |
 | Mises à jour | Automatiques | Automatiques, au lancement |
 
@@ -56,7 +56,7 @@ Adresse : **https://croquettemagique.github.io/mes-comptes/**
 
 **À savoir**
 - Les données restent dans le navigateur de l'appareil et ne passent pas d'un appareil à l'autre. Pour les transférer : « Sauvegarder mes données », puis « Restaurer une sauvegarde » sur l'autre appareil.
-- Effacer les données de navigation du navigateur efface aussi vos comptes : faites une sauvegarde de temps en temps (l'appli le rappelle toutes les deux semaines).
+- **Sauvegarde automatique** : avec Chrome ou Edge, « Activer la sauvegarde automatique » met à jour un fichier de votre choix à chaque modification ; avec Safari, une sauvegarde est téléchargée à l'ouverture (au plus tous les 3 jours, si vos comptes ont changé). Effacer les données du navigateur efface vos comptes, mais pas ces fichiers : « Restaurer une sauvegarde » les recharge.
 
 ---
 

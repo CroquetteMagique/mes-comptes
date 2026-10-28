@@ -31,9 +31,77 @@
     try { return normaliser(JSON.parse(localStorage.getItem(CLE) || "null")); } catch (e) { return normaliser(null); }
   }
   let db = charger();
-  function enregistrer() {
+  // modif = false pour les écritures qui ne changent pas les comptes (notes vues, date de sauvegarde)
+  function enregistrer(modif = true) {
+    if (modif) db.reglages.modifie_le = new Date().toISOString();
     localStorage.setItem(CLE, JSON.stringify(db));          // lève une erreur si le stockage est plein
+    if (modif) auto.planifier();
   }
+  const contenuSauvegarde = () =>
+    JSON.stringify({ application: "mes-comptes", exporte_le: db.reglages.derniere_sauvegarde, donnees: db }, null, 1);
+
+  // ── Sauvegarde automatique ─────────────────────────────────────────────────
+  // Chrome / Edge : le fichier choisi une fois est réécrit à chaque modification.
+  // Safari et autres (pas d'écriture de fichier possible) : app.js télécharge une
+  // sauvegarde à l'ouverture quand elle est « due » (voir /api/notes).
+  const auto = (() => {
+    const fichierPossible = typeof window.showSaveFilePicker === "function";
+    let poignee = null, minuteur = null, bloquee = false;
+    const signaler = () => window.dispatchEvent(new Event("sauvegarde-auto"));
+    // la poignée du fichier est gardée dans IndexedDB (localStorage ne sait pas la stocker)
+    const idb = (mode, action) => new Promise((ok, ko) => {
+      const r = indexedDB.open("mes-comptes-fichier", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("p");
+      r.onerror = () => ko(r.error);
+      r.onsuccess = () => {
+        try {                                             // une erreur ici doit terminer la promesse
+          const t = r.result.transaction("p", mode), q = action(t.objectStore("p"));
+          t.oncomplete = () => ok(q.result);
+          t.onerror = () => ko(t.error);
+        } catch (e) { ko(e); }
+      };
+    });
+    const pret = fichierPossible
+      ? idb("readonly", (s) => s.get("poignee")).then((p) => { poignee = p || null; }).catch(() => {})
+      : Promise.resolve();
+    const autorisee = async () => {
+      try { return (await poignee.queryPermission({ mode: "readwrite" })) === "granted"; } catch (e) { return false; }
+    };
+
+    async function ecrire() {
+      if (!poignee) return;
+      if (!(await autorisee())) { bloquee = true; signaler(); return; }
+      bloquee = false;
+      db.reglages.derniere_sauvegarde = new Date().toISOString();
+      const w = await poignee.createWritable();
+      await w.write(contenuSauvegarde());
+      await w.close();
+      enregistrer(false);
+    }
+    return {
+      planifier() {
+        if (!poignee) return;
+        clearTimeout(minuteur);
+        minuteur = setTimeout(() => ecrire().catch(() => { bloquee = true; signaler(); }), 1500);
+      },
+      async etat() {
+        await pret;
+        if (poignee) bloquee = !(await autorisee());
+        return { fichierPossible, active: !!poignee, bloquee };
+      },
+      async activer() {                                   // à appeler depuis un clic (choix du fichier)
+        poignee = await window.showSaveFilePicker({ suggestedName: "mes_comptes_sauvegarde.json",
+          types: [{ description: "Sauvegarde Mes Comptes", accept: { "application/json": [".json"] } }] });
+        await idb("readwrite", (s) => s.put(poignee, "poignee")).catch(() => {});
+        await ecrire();
+        signaler();
+      },
+      async reprendre() {                                 // à appeler depuis un clic (autorisation)
+        if (poignee && (await poignee.requestPermission({ mode: "readwrite" })) === "granted") { await ecrire(); signaler(); }
+      },
+    };
+  })();
+  window.MesComptesAuto = auto;
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
   // ── Outils ─────────────────────────────────────────────────────────────────
@@ -286,18 +354,23 @@
     }],
     ["GET", /^\/api\/notes$/, async () => {
       const n = await notes();
-      // rappel de sauvegarde : des dépenses, et aucune sauvegarde depuis 14 jours (champ absent côté app.py)
-      const derniere = db.reglages.derniere_sauvegarde;
-      const rappel_sauvegarde = db.depenses.length > 0 && !(derniere && Date.now() - Date.parse(derniere) < 14 * 864e5);
-      if (!n.length) return json({ nouvelles: [], toutes: [], version: null, rappel_sauvegarde });
+      // État de la sauvegarde (absent côté app.py, qui sauvegarde lui-même chaque jour).
+      // « due » : des comptes, pas de fichier auto actif, et des changements depuis une sauvegarde de plus de 3 jours
+      const { derniere_sauvegarde: derniere, modifie_le: modif } = db.reglages;
+      const etat = await auto.etat();
+      const sauvegarde = Object.assign(etat, {
+        due: db.depenses.length > 0 && !(etat.active && !etat.bloquee) && (!derniere || (modif > derniere
+          && Date.now() - Date.parse(derniere) > 3 * 864e5)),
+      });
+      if (!n.length) return json({ nouvelles: [], toutes: [], version: null, sauvegarde });
       let nouvelles = [];
-      if (db.reglages.notes_vues === undefined) { db.reglages.notes_vues = n[0].id; enregistrer(); }
+      if (db.reglages.notes_vues === undefined) { db.reglages.notes_vues = n[0].id; enregistrer(false); }
       else nouvelles = n.filter((x) => x.id > (db.reglages.notes_vues || ""));
-      return json({ nouvelles, toutes: n.slice(0, 10), version: n[0].id, rappel_sauvegarde });
+      return json({ nouvelles, toutes: n.slice(0, 10), version: n[0].id, sauvegarde });
     }],
     ["PUT", /^\/api\/notes\/vues$/, async () => {
       const n = await notes();
-      if (n.length) { db.reglages.notes_vues = n[0].id; enregistrer(); }
+      if (n.length) { db.reglages.notes_vues = n[0].id; enregistrer(false); }
       return json({ ok: true });
     }],
 
@@ -328,8 +401,8 @@
 
     // Sauvegarde / restauration des données (fichier sur l'ordinateur)
     ["GET", /^\/api\/sauvegarde$/, () => {
-      db.reglages.derniere_sauvegarde = new Date().toISOString(); enregistrer();
-      return fichier(new Blob([JSON.stringify({ application: "mes-comptes", exporte_le: db.reglages.derniere_sauvegarde, donnees: db }, null, 1)],
+      db.reglages.derniere_sauvegarde = new Date().toISOString(); enregistrer(false);
+      return fichier(new Blob([contenuSauvegarde()],
         { type: "application/json" }), `mes_comptes_sauvegarde_${new Date().toISOString().slice(0, 10)}.json`);
     }],
     ["POST", /^\/api\/restauration$/, (m, q, b) => {

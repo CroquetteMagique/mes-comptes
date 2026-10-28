@@ -1157,6 +1157,44 @@ function restaurerDonnees() {
   champ.click();
 }
 
+// Sauvegarde automatique (version navigateur)
+async function sauvegardeAuOuverture() {
+  try {
+    await telecharger("/api/sauvegarde");
+    toast("Sauvegarde automatique enregistrée dans vos Téléchargements.");
+  } catch (e) {
+    toast("Vos données ne sont que dans ce navigateur. Pensez à les sauvegarder.", "Sauvegarder", sauvegarderDonnees);
+  }
+}
+
+function majBoutonAuto({ fichierPossible, active, bloquee }) {
+  const b = document.getElementById("btn-auto");
+  if (!b) return;
+  b.hidden = !fichierPossible;
+  b.textContent = !active ? "Activer la sauvegarde automatique"
+    : bloquee ? "Reprendre la sauvegarde automatique" : "Sauvegarde automatique activée ✓";
+}
+
+async function reprendreSauvegardeAuto() {
+  await window.MesComptesAuto.reprendre();
+}
+
+async function basculerSauvegardeAuto() {
+  const etat = await window.MesComptesAuto.etat();
+  if (etat.active && !etat.bloquee) return toast("Vos données sont enregistrées automatiquement dans le fichier choisi.");
+  try {
+    if (etat.active) await window.MesComptesAuto.reprendre();
+    else await window.MesComptesAuto.activer();
+    toast("Sauvegarde automatique activée : le fichier sera mis à jour à chaque modification.");
+  } catch (e) {
+    if (e.name !== "AbortError") toast("Sauvegarde automatique impossible ici. Utilisez « Sauvegarder mes données ».");
+  }
+}
+
+if (window.MesComptesAuto) {
+  window.addEventListener("sauvegarde-auto", () => window.MesComptesAuto.etat().then(majBoutonAuto));
+}
+
 // ── Notes de version ─────────────────────────────────────────────────────────
 // Après une mise à jour automatique, les nouveautés s'affichent une seule fois.
 
@@ -1177,9 +1215,12 @@ async function chargerNotes() {
   notesData = await fetch("/api/notes").then((r) => r.json());
   if (notesData.version) document.getElementById("version-app").textContent = `(${dateVersion(notesData.version)})`;
   if (notesData.nouvelles.length) afficherNotes(notesData.nouvelles, "L'application vient d'être mise à jour.");
-  // Version navigateur : sans sauvegarde récente, proposer d'en faire une
-  if (notesData.rappel_sauvegarde) {
-    setTimeout(() => toast("Vos données ne sont que dans ce navigateur. Pensez à les sauvegarder.", "Sauvegarder", sauvegarderDonnees), 4000);
+  // Version navigateur : sauvegarde automatique (fichier choisi, ou téléchargement à l'ouverture)
+  const s = notesData.sauvegarde;
+  if (s) {
+    majBoutonAuto(s);
+    if (s.bloquee) toast("La sauvegarde automatique est en pause.", "Reprendre", reprendreSauvegardeAuto);
+    else if (s.due) setTimeout(sauvegardeAuOuverture, 2500);
   }
 }
 
