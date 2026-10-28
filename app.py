@@ -146,18 +146,19 @@ def init_db():
         db.execute("ALTER TABLE depenses ADD COLUMN type_depense TEXT DEFAULT 'autre'")
     if "personne" not in cols:
         db.execute("ALTER TABLE depenses ADD COLUMN personne TEXT")
-    if "fixe" not in [r[1] for r in db.execute("PRAGMA table_info(revenus)").fetchall()]:
+    cols_rev = [r[1] for r in db.execute("PRAGMA table_info(revenus)").fetchall()]
+    if "fixe" not in cols_rev:
         db.execute("ALTER TABLE revenus ADD COLUMN fixe INTEGER DEFAULT 0")
     db.execute("UPDATE depenses SET a_rembourser = 0 WHERE a_rembourser IS NULL")
     db.execute("UPDATE depenses SET type_depense = 'autre' WHERE type_depense IS NULL")
     db.commit()
     _auto_create_current_month(db)
-    _copier_revenus_fixes(db)
     db.close()
 
 
 def _auto_create_current_month(db):
     """Crée le mois en cours s'il n'existe pas, en copiant les charges fixes du mois précédent."""
+    _copier_revenus_fixes(db)
     mois_actuel = date.today().strftime("%Y-%m")
     exists = db.execute("SELECT 1 FROM depenses WHERE mois=? LIMIT 1", (mois_actuel,)).fetchone()
     if exists:
@@ -194,8 +195,7 @@ def _copier_revenus_fixes(db):
     if prec and not db.execute("SELECT 1 FROM revenus WHERE mois=? AND fixe=1", (mois_actuel,)).fetchone():
         db.execute("INSERT INTO revenus (mois, element, montant, fixe) "
                    "SELECT ?, element, montant, 1 FROM revenus WHERE mois=? AND fixe=1", (mois_actuel, prec))
-    db.execute("INSERT OR REPLACE INTO reglages (cle, valeur) VALUES ('revenus_fixes_mois', ?)", (mois_actuel,))
-    db.commit()
+    _regler(db, "revenus_fixes_mois", mois_actuel)
 
 
 # ── Pages ──────────────────────────────────────────────────────────────────────

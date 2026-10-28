@@ -612,6 +612,7 @@ function openModal(id) {
 }
 
 function closeModal(id) {
+  if (id === "modal-dialog") return document.getElementById("dialog-cancel").click();   // répond « Annuler »
   document.getElementById(id).classList.remove("open");
   if (id === "modal-dictee") { veutEcouter = false; if (ecoute) reco.stop(); }
   if (id === "modal-depense") {
@@ -933,19 +934,25 @@ async function deleteRevenu(id) {
 let reco = null;
 let ecoute = false;
 let dicteeItems = [];
-let dicteeRevenus = false;   // la dictée remplit les revenus au lieu des dépenses
-const quoiDicte = (n = 2) => (dicteeRevenus ? "revenu" : "dépense") + (n > 1 ? "s" : "");
+// Ce que la dictée remplit, avec ses textes (e : accord au féminin)
+const DICTEE = {
+  depense: { nom: "dépense", un: "une dépense", e: "e", ecoute: "ce que vous avez payé et le prix",
+    exemple: "Dites par exemple : « 4 septembre, Carrefour, 45 euros 20. Le 6, machine à laver, 3 euros. »" },
+  revenu: { revenu: true, nom: "revenu", un: "un revenu", e: "", ecoute: "ce que vous avez reçu et le montant",
+    exemple: "Dites par exemple : « Le 5, salaire, 1500 euros. Le 12, virement de Paul, 20 euros. »" },
+};
+let dictee = DICTEE.depense;
+const nDicte = (n) => `${n} ${dictee.nom}${n > 1 ? "s" : ""}`;
+const accord = (n) => dictee.e + (n > 1 ? "s" : "");
 // Revenus qui reviennent chaque mois : cochés « fixe » d'office dans la liste à vérifier
 const REVENU_FIXE = /salaire|paie|paye|apl|caf|bourse|pension|allocation|loyer/i;
 
 function dicteeStatus(texte) { document.getElementById("dictee-status").textContent = texte; }
 
 function openDictee(mode) {
-  dicteeRevenus = mode === "revenu";
-  document.getElementById("dictee-quoi").textContent = quoiDicte();
-  document.getElementById("dictee-exemple").textContent = dicteeRevenus
-    ? "Dites par exemple : « Le 5, salaire, 1500 euros. Le 12, virement de Paul, 20 euros. »"
-    : "Dites par exemple : « 4 septembre, Carrefour, 45 euros 20. Le 6, machine à laver, 3 euros. »";
+  dictee = DICTEE[mode] || DICTEE.depense;
+  document.getElementById("dictee-quoi").textContent = dictee.nom + "s";
+  document.getElementById("dictee-exemple").textContent = dictee.exemple;
   document.getElementById("dictee-texte").value = "";
   document.getElementById("dictee-error").textContent = "";
   document.getElementById("dictee-etape1").hidden = false;
@@ -1036,7 +1043,7 @@ function toggleMicro() {
   veutEcouter = true;
   demarrer();
   setEcoute(true);
-  dicteeStatus(`À l'écoute… Dites la date, ${dicteeRevenus ? "ce que vous avez reçu et le montant" : "ce que vous avez payé et le prix"}. Appuyez à nouveau sur le micro pour arrêter.`);
+  dicteeStatus(`À l'écoute… Dites la date, ${dictee.ecoute}. Appuyez à nouveau sur le micro pour arrêter.`);
 }
 
 async function analyserDictee() {
@@ -1044,17 +1051,15 @@ async function analyserDictee() {
   if (ecoute) reco.stop();
   const texte = document.getElementById("dictee-texte").value.trim();
   const err = document.getElementById("dictee-error");
-  if (!texte) return (err.textContent = `Dictez ou tapez au moins ${dicteeRevenus ? "un revenu" : "une dépense"}.`);
+  if (!texte) return (err.textContent = `Dictez ou tapez au moins ${dictee.un}.`);
   const r = await fetch("/api/dictee", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ texte, mois: currentMois }),
   }).then((x) => x.json());
-  if (!r.depenses.length) return (err.textContent = `Aucun montant reconnu. Précisez le montant de chaque ${quoiDicte(1)}, par exemple « 12 euros 50 ».`);
+  if (!r.depenses.length) return (err.textContent = `Aucun montant reconnu. Précisez le montant de chaque ${dictee.nom}, par exemple « 12 euros 50 ».`);
   err.textContent = "";
-  dicteeItems = dicteeRevenus
-    ? r.depenses.map((d) => ({ element: d.element, montant: d.montant, date_echeance: d.date_echeance, mois: d.mois,
-        fixe: REVENU_FIXE.test(d.element) ? 1 : 0 }))
-    : r.depenses;
+  dicteeItems = r.depenses;
+  if (dictee.revenu) dicteeItems.forEach((d) => { d.fixe = REVENU_FIXE.test(d.element) ? 1 : 0; });
   document.getElementById("dictee-noncompris").textContent = r.non_compris.length
     ? `Pas de montant compris pour : « ${r.non_compris.join(" », « ")} ». Ajoutez-le à la main si besoin.` : "";
   renderDicteeListe();
@@ -1066,22 +1071,24 @@ async function analyserDictee() {
 function renderDicteeListe() {
   const options = (t) => Object.keys(TYPE_LABELS)
     .map((k) => `<option value="${k}"${k === t ? " selected" : ""}>${TYPE_LABELS[k]}</option>`).join("");
+  // champs propres au mode : « fixe » pour un revenu ; type et remboursement pour une dépense
+  const champs = (d) => dictee.revenu ? `
+      <label class="dr-remb dr-fixe"><input type="checkbox" ${d.fixe ? "checked" : ""}> Fixe, recopié chaque mois</label>` : `
+      <select class="dr-type" aria-label="Type">${options(d.type_depense)}</select>
+      <label class="dr-remb"><input type="checkbox" ${d.a_rembourser ? "checked" : ""} onchange="this.closest('.dictee-row').querySelector('.dr-personne').hidden = !this.checked"> À rembourser</label>
+      <input class="dr-personne" list="personnes-list" aria-label="Qui doit rembourser" placeholder="Par qui ?" value="${esc(d.personne || "")}" ${d.a_rembourser ? "" : "hidden"}>`;
   document.getElementById("dictee-liste").innerHTML = dicteeItems.map((d, i) => `
     <div class="dictee-row" data-i="${i}">
       <input class="dr-element" aria-label="Élément" value="${esc(d.element === "?" ? "" : d.element)}" placeholder="Élément">
       <span class="dr-montant"><input type="number" step="0.01" aria-label="Montant" value="${(+d.montant).toFixed(2)}"><span>€</span></span>
-      <input class="dr-date" type="date" aria-label="Date" value="${d.date_echeance || ""}">${dicteeRevenus ? `
-      <label class="dr-remb dr-fixe"><input type="checkbox" ${d.fixe ? "checked" : ""}> Fixe, recopié chaque mois</label>` : `
-      <select class="dr-type" aria-label="Type">${options(d.type_depense)}</select>
-      <label class="dr-remb"><input type="checkbox" ${d.a_rembourser ? "checked" : ""} onchange="this.closest('.dictee-row').querySelector('.dr-personne').hidden = !this.checked"> À rembourser</label>
-      <input class="dr-personne" list="personnes-list" aria-label="Qui doit rembourser" placeholder="Par qui ?" value="${esc(d.personne || "")}" ${d.a_rembourser ? "" : "hidden"}>`}
+      <input class="dr-date" type="date" aria-label="Date" value="${d.date_echeance || ""}">${champs(d)}
       <button class="btn-icon btn-icon--danger dr-suppr" title="Retirer cette ligne" aria-label="Retirer cette ligne" onclick="retirerDictee(${i})">${icon("x")}</button>
     </div>`).join("");
   const n = dicteeItems.length;
   const total = dicteeItems.reduce((s, d) => s + (+d.montant || 0), 0);
   document.getElementById("dictee-resume").textContent =
-    `${n} ${quoiDicte(n)} ${dicteeRevenus ? "compris" : n > 1 ? "comprises" : "comprise"}, ${fmt(total)}. Vérifiez et corrigez si besoin.`;
-  document.getElementById("dictee-save").textContent = `Enregistrer ${n} ${quoiDicte(n)}`;
+    `${nDicte(n)} compris${dictee.e && accord(n)}, ${fmt(total)}. Vérifiez et corrigez si besoin.`;
+  document.getElementById("dictee-save").textContent = `Enregistrer ${nDicte(n)}`;
 }
 
 function lireDicteeListe() {
@@ -1090,7 +1097,7 @@ function lireDicteeListe() {
     d.element       = row.querySelector(".dr-element").value.trim();
     d.montant       = parseFloat(row.querySelector(".dr-montant input").value) || 0;
     d.date_echeance = row.querySelector(".dr-date").value || null;
-    if (dicteeRevenus) { d.fixe = row.querySelector(".dr-fixe input").checked ? 1 : 0; return; }
+    if (dictee.revenu) { d.fixe = row.querySelector(".dr-fixe input").checked ? 1 : 0; return; }
     d.type_depense  = row.querySelector(".dr-type").value;
     d.a_rembourser  = row.querySelector(".dr-remb input").checked ? 1 : 0;
     d.personne      = row.querySelector(".dr-personne").value.trim();
@@ -1117,7 +1124,7 @@ async function enregistrerDictee() {
   err.textContent = "";
   for (const d of dicteeItems) {
     const mois = d.date_echeance ? d.date_echeance.slice(0, 7) : (d.mois || currentMois);
-    if (dicteeRevenus) {
+    if (dictee.revenu) {
       await envoyer("/api/revenus", "POST", { mois, element: d.element, date_revenu: d.date_echeance, montant: d.montant, fixe: d.fixe });
     } else {
       await envoyer("/api/depenses", "POST", { ...d, categorie: "variable", mois });
@@ -1125,7 +1132,7 @@ async function enregistrerDictee() {
   }
   const n = dicteeItems.length;
   closeModal("modal-dictee");
-  toast(`${n} ${quoiDicte(n)} ajouté${dicteeRevenus ? "" : "e"}${n > 1 ? "s" : ""}`);
+  toast(`${nDicte(n)} ajouté${accord(n)}`);
   loadMois().then(refreshActive);
 }
 
@@ -1161,8 +1168,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   const open = [...document.querySelectorAll(".modal-overlay.open")].pop();
   if (!open) return;
-  if (open.id === "modal-dialog") document.getElementById("dialog-cancel").click();
-  else closeModal(open.id);
+  closeModal(open.id);
 });
 
 // ── Sauvegarde / restauration (version navigateur : les données sont dans le navigateur) ──

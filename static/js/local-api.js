@@ -132,10 +132,10 @@
     });
   }
 
+  const champsRevenu = (r) => ({ element: r.element, date_revenu: r.date_revenu || null, montant: Number(r.montant), fixe: Number(r.fixe || 0) });
   function ajouterRevenu(r) {
     db.seq.revenus += 1;
-    db.revenus.push({ id: db.seq.revenus, mois: r.mois, element: r.element, date_revenu: r.date_revenu || null,
-      montant: Number(r.montant), fixe: Number(r.fixe || 0), created_at: new Date().toISOString() });
+    db.revenus.push({ id: db.seq.revenus, mois: r.mois, ...champsRevenu(r), created_at: new Date().toISOString() });
   }
 
   // Revenus fixes du dernier mois saisi, copiés une seule fois par mois (comme app.py)
@@ -335,7 +335,7 @@
     }],
     ["PUT", /^\/api\/revenus\/(\d+)$/, (m, q, b) => {
       const r = db.revenus.find((x) => x.id === Number(m[1]));
-      if (r) Object.assign(r, { element: b.element, date_revenu: b.date_revenu || null, montant: Number(b.montant), fixe: Number(b.fixe || 0) });
+      if (r) Object.assign(r, champsRevenu(b));
       enregistrer(); return json({ ok: true });
     }],
 
