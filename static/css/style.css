@@ -329,7 +329,7 @@ nav { display: flex; flex-direction: column; gap: 2px; }
   vertical-align: middle;
 }
 .table tbody tr:last-child td { border-bottom: 0; }
-.table tbody tr:not(.mois-group-header):not(.empty-row):hover td { background: var(--surface2); }
+.table tbody tr:not(.empty-row):hover td { background: var(--surface2); }
 .table th.num,
 .table td.amount { text-align: right; }
 .table td.amount { font-weight: 700; white-space: nowrap; }
@@ -386,14 +386,22 @@ nav { display: flex; flex-direction: column; gap: 2px; }
 .filter-btn:hover { color: var(--text); }
 .filter-btn.active { background: var(--white); color: #0A0A0A; font-weight: 600; }
 
-.mois-group-header td {
-  background: var(--surface2);
-  padding: .65rem 1.25rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-  text-transform: capitalize;
+/* Remboursements : une carte par mois */
+.rembours-liste { display: grid; gap: 1rem; }
+.rembours-mois { border-left: 3px solid var(--ink); }
+.rembours-mois--solde { border-left-color: var(--green); }
+.rembours-mois-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  padding: 1rem 1.25rem; background: var(--surface2); border-bottom: 1px solid var(--border);
 }
-.mois-group-header td.amount { font-family: var(--font-ui); color: var(--text-2); }
+.rembours-mois-titre {
+  margin: 0; font-family: var(--font-display); font-size: 1.2rem; font-weight: 700;
+  color: var(--ink); text-transform: capitalize;
+}
+.rembours-mois-resume { margin: .2rem 0 0; font-size: .85rem; color: var(--text-3); }
+.rembours-mois-attente { color: var(--gold); font-weight: 600; }
+.rembours-mois-actions { display: flex; align-items: center; gap: .5rem; }
+.rembours-mois-total { font-size: 1.15rem; margin-right: .5rem; white-space: nowrap; }
 .row-rembourse td { color: var(--text-3); }
 .row-rembourse td:first-child { text-decoration: line-through; }
 
@@ -631,7 +639,6 @@ nav { display: flex; flex-direction: column; gap: 2px; }
   .table td:not(:first-child):not(.amount) { order: 3; }
   .table td:last-child:not(.amount):not(:first-child) { margin-left: auto; }
   .table .type-tag { display: block; margin: 0; }
-  .mois-group-header { background: var(--surface2); }
   .empty-row td { flex: 1 1 100%; padding: 1.25rem 0 !important; }
   .totaux-item + .totaux-item { border-left: 0; border-top: 1px solid var(--border); }
   .totaux-item { flex-basis: 100%; }

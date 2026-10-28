@@ -789,61 +789,47 @@ function renderRemboursements() {
   document.getElementById("rembours-recu").textContent    = fmt(recu);
   document.getElementById("rembours-total").textContent   = fmt(attente + recu);
 
-  const tbody = document.getElementById("list-remboursements");
-  tbody.innerHTML = "";
+  const liste = document.getElementById("list-remboursements");
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">Rien ici. Activez « Quelqu'un doit me rembourser » sur une dépense pour la suivre ici.</td></tr>`;
+    liste.innerHTML = `<div class="table-wrap"><table class="table"><tbody><tr class="empty-row"><td>Rien ici. Activez « Quelqu'un doit me rembourser » sur une dépense pour la suivre ici.</td></tr></tbody></table></div>`;
     return;
   }
 
-  // Grouper par mois
+  // Une carte par mois, du plus récent au plus ancien
   const parMois = {};
-  filtered.forEach((d) => {
-    if (!parMois[d.mois]) parMois[d.mois] = [];
-    parMois[d.mois].push(d);
-  });
-
-  Object.keys(parMois).sort((a, b) => b.localeCompare(a)).forEach((mois) => {
-    const items = parMois[mois];
-    const totalMois = items.reduce((s, d) => s + d.montant, 0);
-
-    // Ligne séparateur de mois
-    const trHeader = document.createElement("tr");
-    trHeader.className = "mois-group-header";
-    trHeader.innerHTML = `
-      <td colspan="3">${formatMoisLabel(mois)}</td>
-      <td class="amount">${fmt(totalMois)}</td>
-      <td style="white-space:nowrap">
-        <button class="btn-pdf btn-pdf--sm" onclick="downloadPDFRemboursementsMois('${mois}')">${icon("download")} PDF</button>
-        <button class="btn-pdf btn-pdf--sm btn-pdf--share" onclick="sharePDFRemboursements('${mois}')" title="Envoyer par WhatsApp" aria-label="Envoyer par WhatsApp">${icon("share")}</button>
-      </td>
-    `;
-    tbody.appendChild(trHeader);
-
-    items.forEach((d) => {
-      const rembourse = d.a_rembourser === 2;
-      const tr = document.createElement("tr");
-      tr.className = rembourse ? "row-rembourse" : "";
-      tr.innerHTML = `
+  filtered.forEach((d) => { (parMois[d.mois] = parMois[d.mois] || []).push(d); });
+  const ligne = (d) => {
+    const rembourse = d.a_rembourser === 2;
+    const action = rembourse ? "Marquer en attente" : "Marquer comme remboursé";
+    return `
+      <tr class="${rembourse ? "row-rembourse" : ""}">
         <td>${esc(d.element)}${d.personne ? ` <span class="type-tag">${esc(d.personne)}</span>` : ""}</td>
         <td>${fmtDate(d.date_echeance)}</td>
         <td class="amount">${fmt(d.montant)}</td>
-        <td>
-          <span class="badge ${rembourse ? 'badge-green' : 'badge-orange'}">
-            ${rembourse ? 'Remboursé' : 'En attente'}
-          </span>
-        </td>
-        <td>
-          <button class="btn-icon ${rembourse ? '' : 'btn-icon--ok'}" title="${rembourse ? 'Marquer en attente' : 'Marquer comme remboursé'}"
-                  aria-label="${rembourse ? 'Marquer en attente' : 'Marquer comme remboursé'}"
-                  onclick="toggleRembourse(${d.id})">
-            ${icon(rembourse ? "undo" : "check")}
-          </button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-  });
+        <td><span class="badge ${rembourse ? "badge-green" : "badge-orange"}">${rembourse ? "Remboursé" : "En attente"}</span></td>
+        <td><button class="btn-icon ${rembourse ? "" : "btn-icon--ok"}" title="${action}" aria-label="${action}" onclick="toggleRembourse(${d.id})">${icon(rembourse ? "undo" : "check")}</button></td>
+      </tr>`;
+  };
+  liste.innerHTML = Object.keys(parMois).sort((a, b) => b.localeCompare(a)).map((mois) => {
+    const items = parMois[mois];
+    const enAttente = items.filter((d) => d.a_rembourser === 1).reduce((s, d) => s + d.montant, 0);
+    const total = items.reduce((s, d) => s + d.montant, 0);
+    return `
+    <article class="table-wrap rembours-mois${enAttente ? "" : " rembours-mois--solde"}">
+      <header class="rembours-mois-head">
+        <div>
+          <h3 class="rembours-mois-titre">${formatMoisLabel(mois)}</h3>
+          <p class="rembours-mois-resume">${items.length} dépense${items.length > 1 ? "s" : ""} · ${enAttente ? `<span class="rembours-mois-attente">${fmt(enAttente)} en attente</span>` : "tout est remboursé"}</p>
+        </div>
+        <div class="rembours-mois-actions">
+          <strong class="rembours-mois-total">${fmt(total)}</strong>
+          <button class="btn-pdf btn-pdf--sm" onclick="downloadPDFRemboursementsMois('${mois}')">${icon("download")} PDF</button>
+          <button class="btn-pdf btn-pdf--sm btn-pdf--share" onclick="sharePDFRemboursements('${mois}')" title="Envoyer par WhatsApp" aria-label="Envoyer par WhatsApp">${icon("share")}</button>
+        </div>
+      </header>
+      <table class="table"><tbody>${items.map(ligne).join("")}</tbody></table>
+    </article>`;
+  }).join("");
 }
 
 async function toggleRembourse(id) {
