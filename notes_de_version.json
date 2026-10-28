@@ -1,5 +1,13 @@
 [
   {
+    "id": "2026-10-28.2",
+    "titre": "Note de test",
+    "points": [
+      "Ceci est une note de test : si vous la voyez, les mises à jour automatiques fonctionnent.",
+      "Rien ne change dans l'appli ni dans vos données."
+    ]
+  },
+  {
     "id": "2026-10-28.1",
     "titre": "Sauvegarde automatique (version navigateur)",
     "points": [
