@@ -878,6 +878,47 @@ def export_pdf(mois):
                      as_attachment=True, download_name=filename)
 
 
+# ── PDF des remboursements : charte de l'appli (fond noir, texte blanc, or) ────
+# Même mise en page que pdfRemboursements() dans static/js/local-api.js.
+NOIR, CARTE, TRAIT, LIGNE = (10, 10, 10), (20, 20, 20), (45, 45, 45), (32, 32, 32)
+OR, OR_CLAIR, BLANC = (201, 164, 92), (235, 210, 155), (245, 243, 238)
+GRIS, GRIS_FONCE, VERT = (169, 166, 158), (117, 114, 107), (93, 201, 143)
+MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+           "août", "septembre", "octobre", "novembre", "décembre"]
+
+
+def _euro(n):
+    return format(n, ",.2f").replace(",", " ").replace(".", ",") + " €"
+
+
+def _date_fr(s):
+    return "/".join(reversed(s.split("-"))) if s else "-"
+
+
+def _nom_mois(m):
+    annee, mois = m.split("-")
+    return f"{MOIS_FR[int(mois) - 1].capitalize()} {annee}"
+
+
+class _PdfSombre(FPDF):
+    """Fond noir et pied de page sur chaque page."""
+    police = "Helvetica"
+
+    def header(self):
+        self.set_fill_color(*NOIR)
+        self.rect(0, 0, 210, 297, "F")
+
+    def footer(self):
+        self.set_draw_color(*TRAIT)
+        self.set_line_width(0.2)
+        self.line(16, 284, 194, 284)
+        self.set_font(self.police, "", 7.5)
+        self.set_text_color(*GRIS_FONCE)
+        self.set_xy(16 - self.c_margin, 286.5)   # cell() : seule méthode où {nb} devient le nombre de pages
+        self.cell(120, 4, f"Mes Comptes · Page {self.page_no()} / {{nb}}")
+        self.text(194 - self.get_string_width("Remboursements"), 289, "Remboursements")
+
+
 @app.route("/api/export/pdf/remboursements")
 @app.route("/api/export/pdf/remboursements/<mois_filtre>")
 def export_pdf_remboursements(mois_filtre=None):
@@ -896,120 +937,101 @@ def export_pdf_remboursements(mois_filtre=None):
     total_recu     = sum(r["montant"] for r in rows if r["a_rembourser"] == 2)
     total_global   = total_attente + total_recu
 
-    def fmt(n):
-        return f"{n:,.2f} EUR".replace(",", " ")
-
-    def fmt_date(s):
-        if not s: return "-"
-        parts = s.split("-")
-        return f"{parts[2]}/{parts[1]}/{parts[0]}"
-
-    def mois_label(m):
-        y, mo = m.split("-")
-        from datetime import date as dt
-        return dt(int(y), int(mo), 1).strftime("%B %Y").capitalize()
-
-    pdf = FPDF()
+    pdf = _PdfSombre()
+    pdf.set_auto_page_break(False)
     font_r, font_b = _find_arial()
     if font_r:
-        pdf.add_font("Arial", "",  font_r, uni=True)
-        pdf.add_font("Arial", "B", font_b, uni=True)
-        FONT = "Arial"
-    else:
-        FONT = "Helvetica"
-    pdf.add_page()
-    pdf.set_margins(15, 15, 15)
+        pdf.add_font("Arial", "", font_r)
+        pdf.add_font("Arial", "B", font_b)
+        pdf.police, t = "Arial", str
+    else:   # polices de base : pas de « € » ni de tiret long
+        t = lambda x: str(x).replace("€", "EUR").replace("—", "-").encode("latin-1", "replace").decode("latin-1")
+
+    def ecrire(x, y, texte, taille, couleur, gras=False, align="L"):
+        pdf.set_font(pdf.police, "B" if gras else "", taille)
+        pdf.set_text_color(*couleur)
+        texte = t(texte)
+        w = pdf.get_string_width(texte)
+        pdf.text(x - w if align == "R" else x - w / 2 if align == "C" else x, y, texte)
+
+    def trait(couleur, epaisseur, x1, y1, x2, y2):
+        pdf.set_draw_color(*couleur)
+        pdf.set_line_width(epaisseur)
+        pdf.line(x1, y1, x2, y2)
+
+    M, D, BAS = 16, 194, 278          # marge gauche, bord droit, bas de la zone utile
+    maintenant = datetime.now()
 
     # ── En-tête
-    pdf.set_fill_color(12, 13, 18)
-    pdf.rect(0, 0, 210, 30, "F")
-    titre = f"Remboursements — {mois_label(mois_filtre)}" if mois_filtre else "Remboursements — Tous les mois"
-    if personne:
-        titre += f" — {personne}"
-    pdf.set_text_color(232, 184, 109)
-    pdf.set_font(FONT, "B", 16)
-    pdf.set_xy(15, 8)
-    pdf.cell(0, 10, f"Mes Comptes - {titre}", ln=True)
-    pdf.set_text_color(152, 150, 160)
-    pdf.set_font(FONT, "", 9)
-    pdf.set_x(15)
-    pdf.cell(0, 6, f"Exporte le {datetime.now().strftime('%d/%m/%Y a %H:%M')}", ln=True)
-    pdf.ln(8)
+    pdf.add_page()
+    pdf.set_fill_color(*OR)
+    pdf.rect(M, 15, 11, 11, "F", round_corners=True, corner_radius=2.5)
+    ecrire(M + 5.5, 22.6, "€", 13, NOIR, True, "C")
+    ecrire(M + 15, 22.4, "MES COMPTES", 8.5, OR_CLAIR, True)
+    ecrire(D, 22.4, f"Exporté le {maintenant:%d/%m/%Y} à {maintenant:%H:%M}", 8, GRIS_FONCE, align="R")
+    ecrire(M, 42, "Remboursements", 26, BLANC, True)
+    ecrire(M, 50, (_nom_mois(mois_filtre) if mois_filtre else "Tous les mois") + (f" · {personne}" if personne else ""), 11, GRIS)
+    trait(OR, 0.35, M, 56, D, 56)
 
-    # ── Cartes récap
-    def summary_card(x, y, label, value, color):
-        pdf.set_fill_color(*color)
-        pdf.set_xy(x, y)
-        pdf.cell(55, 18, "", border=0, fill=True)
-        pdf.set_xy(x + 3, y + 3)
-        pdf.set_font(FONT, "", 7)
-        pdf.set_text_color(100, 100, 100)
-        pdf.cell(49, 4, label.upper(), ln=True)
-        pdf.set_xy(x + 3, y + 8)
-        pdf.set_font(FONT, "B", 11)
-        pdf.set_text_color(30, 30, 30)
-        pdf.cell(49, 7, value)
+    # ── Carte récapitulative
+    y = 63
+    pdf.set_fill_color(*CARTE)
+    pdf.set_draw_color(*OR)
+    pdf.set_line_width(0.35)
+    pdf.rect(M, y, D - M, 36, "DF", round_corners=True, corner_radius=3)
+    ecrire(M + 8, y + 11, "RESTE À ME REMBOURSER", 8, OR, True)
+    ecrire(M + 8, y + 27, _euro(total_attente), 28, OR_CLAIR, True)
+    trait(TRAIT, 0.2, M + 112, y + 7, M + 112, y + 29)
+    ecrire(M + 120, y + 11, "Déjà remboursé", 8, GRIS)
+    ecrire(M + 120, y + 17.5, _euro(total_recu), 12, VERT, True)
+    ecrire(M + 120, y + 25, "Total avancé", 8, GRIS)
+    ecrire(M + 120, y + 31.5, _euro(total_global), 12, BLANC, True)
+    y += 48
 
-    summary_card(15,  38, "En attente",     fmt(total_attente), (255, 245, 210))
-    summary_card(75,  38, "Deja rembourse", fmt(total_recu),    (220, 245, 230))
-    summary_card(135, 38, "Total avance",   fmt(total_global),  (230, 230, 245))
-    pdf.ln(30)
-
-    # ── Tableaux par mois
-    from collections import OrderedDict
-    par_mois = OrderedDict()
+    # ── Une section par mois, du plus récent au plus ancien
+    par_mois = {}
     for r in rows:
-        if r["mois"] not in par_mois:
-            par_mois[r["mois"]] = []
-        par_mois[r["mois"]].append(r)
+        par_mois.setdefault(r["mois"], []).append(r)
 
-    pdf.set_text_color(30, 30, 30)
+    def titre_mois(y, mois, items, suite=False):
+        attente, n = sum(r["montant"] for r in items if r["a_rembourser"] == 1), len(items)
+        ecrire(M, y + 6, _nom_mois(mois) + (" (suite)" if suite else ""), 13, OR, True)
+        resume = f"{n} dépense{'s' if n > 1 else ''} · " + (f"{_euro(attente)} en attente" if attente else "tout est remboursé")
+        ecrire(D, y + 6, resume, 8.5, GRIS, align="R")
+        trait(TRAIT, 0.2, M, y + 9.5, D, y + 9.5)
+        return y + 12
 
-    for mois, items in par_mois.items():
-        total_mois = sum(r["montant"] for r in items)
-        attente_mois = sum(r["montant"] for r in items if r["a_rembourser"] == 1)
+    for mois in sorted(par_mois, reverse=True):
+        items = par_mois[mois]
+        if y + 32 > BAS:
+            pdf.add_page()
+            y = 20
+        y = titre_mois(y, mois, items)
+        for r in items:
+            if y + 8 > BAS:
+                pdf.add_page()
+                y = titre_mois(20, mois, items, suite=True)
+            rembourse = r["a_rembourser"] == 2
+            texte = GRIS_FONCE if rembourse else BLANC
+            pdf.set_fill_color(*(VERT if rembourse else OR))
+            pdf.rect(M, y + 1.5, 0.9, 5, "F")
+            ecrire(M + 4, y + 5.4, str(r["element"] or "")[:48], 9.5, texte)
+            ecrire(M + 100, y + 5.4, _date_fr(r["date_echeance"]), 8.5, GRIS)
+            pdf.set_fill_color(*((17, 38, 27) if rembourse else (40, 33, 20)))
+            pdf.rect(M + 128, y + 1.3, 24, 5.4, "F", round_corners=True, corner_radius=2.6)
+            ecrire(M + 140, y + 5.1, "Remboursé" if rembourse else "En attente", 7.5, VERT if rembourse else OR, True, "C")
+            ecrire(D, y + 5.4, _euro(r["montant"]), 9.5, texte, True, "R")
+            trait(LIGNE, 0.2, M + 4, y + 8, D, y + 8)
+            y += 8
+        if y + 10 > BAS:
+            pdf.add_page()
+            y = 20
+        ecrire(D - 32, y + 6, "Total du mois", 8.5, GRIS, align="R")
+        ecrire(D, y + 6, _euro(sum(r["montant"] for r in items)), 10.5, OR_CLAIR, True, "R")
+        y += 16
 
-        # Titre du mois
-        pdf.set_font(FONT, "B", 10)
-        pdf.set_fill_color(230, 230, 245)
-        pdf.set_text_color(30, 30, 80)
-        pdf.cell(0, 8, f"  {mois_label(mois)}   —   Total : {fmt(total_mois)}   |   En attente : {fmt(attente_mois)}", fill=True, ln=True)
-        pdf.ln(1)
-
-        # En-tête tableau
-        pdf.set_fill_color(242, 242, 248)
-        pdf.set_font(FONT, "B", 8)
-        pdf.set_text_color(80, 80, 100)
-        pdf.cell(90, 6, "Element",   fill=True)
-        pdf.cell(30, 6, "Date",      fill=True)
-        pdf.cell(30, 6, "Montant",   fill=True)
-        pdf.cell(30, 6, "Statut",    fill=True)
-        pdf.ln()
-
-        # Lignes
-        pdf.set_font(FONT, "", 8)
-        for i, r in enumerate(items):
-            statut   = "Rembourse" if r["a_rembourser"] == 2 else "En attente"
-            is_remb  = r["a_rembourser"] == 2
-            pdf.set_fill_color(248, 248, 248) if i % 2 == 0 else pdf.set_fill_color(242, 242, 245)
-            pdf.set_text_color(120, 120, 120) if is_remb else pdf.set_text_color(40, 40, 40)
-            pdf.cell(90, 6, str(r["element"] or "")[:40], fill=True)
-            pdf.cell(30, 6, fmt_date(r["date_echeance"]),  fill=True)
-            pdf.set_font(FONT, "B", 8)
-            pdf.cell(30, 6, fmt(r["montant"]),             fill=True)
-            pdf.set_font(FONT, "", 8)
-            pdf.set_text_color(100, 150, 100) if is_remb else pdf.set_text_color(180, 120, 40)
-            pdf.cell(30, 6, statut, fill=True)
-            pdf.ln()
-
-        # Ligne total mois
-        pdf.set_fill_color(210, 210, 235)
-        pdf.set_font(FONT, "B", 8)
-        pdf.set_text_color(30, 30, 80)
-        pdf.cell(120, 6, "TOTAL DU MOIS", fill=True, align="R")
-        pdf.cell(30,  6, fmt(total_mois),    fill=True)
-        pdf.cell(30,  6, "",                fill=True)
-        pdf.ln(8)
+    if not rows:
+        ecrire(M, y + 6, "Aucun remboursement à afficher.", 10, GRIS)
 
     filename = f"remboursements_{mois_filtre or 'tous'}{'_' + personne if personne else ''}.pdf"
     buf = io.BytesIO(pdf.output())

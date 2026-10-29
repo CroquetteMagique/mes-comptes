@@ -336,22 +336,94 @@
     return pdf.output("blob");
   }
 
+  // ── PDF des remboursements : charte de l'appli (fond noir, texte blanc, or) ──
+  // Même mise en page que export_pdf_remboursements() dans app.py.
+  const C = { noir: [10, 10, 10], carte: [20, 20, 20], trait: [45, 45, 45], ligne: [32, 32, 32],
+    or: [201, 164, 92], orClair: [235, 210, 155], blanc: [245, 243, 238],
+    gris: [169, 166, 158], grisFonce: [117, 114, 107], vert: [93, 201, 143] };
+
   function pdfRemboursements(mois, qui) {
     const rows = aRembourser(db.depenses.filter((d) => (!mois || d.mois === mois) && (!qui || d.personne === qui)));
     const attente = somme(rows.filter((r) => r.a_rembourser === 1)), recu = somme(rows.filter((r) => r.a_rembourser === 2));
-    const pdf = pdfBase(`Remboursements - ${mois ? nomMois(mois) : "Tous les mois"}${qui ? " - " + qui : ""}`);
-    carte(pdf, 15, 38, "En attente", euro(attente), [255, 245, 210]);
-    carte(pdf, 75, 38, "Déjà remboursé", euro(recu), [220, 245, 230]);
-    carte(pdf, 135, 38, "Total avancé", euro(attente + recu), [230, 230, 245]);
-    let y = 66;
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: "mm", format: "a4" });
+    const M = 16, D = 194, BAS = 278;              // marge gauche, bord droit, bas de la zone utile
+    const fond = () => { pdf.setFillColor(...C.noir); pdf.rect(0, 0, 210, 297, "F"); };
+    const nouvellePage = () => { pdf.addPage(); fond(); };
+    const ecrire = (x, y, texte, taille, couleur, gras = false, align = "left") => {
+      pdf.setFont("helvetica", gras ? "bold" : "normal"); pdf.setFontSize(taille); pdf.setTextColor(...couleur);
+      pdf.text(String(texte), x, y, align === "left" ? {} : { align });
+    };
+    const trait = (couleur, epaisseur, x1, y1, x2, y2) => {
+      pdf.setDrawColor(...couleur); pdf.setLineWidth(epaisseur); pdf.line(x1, y1, x2, y2);
+    };
+    const t = new Date();
+
+    // En-tête
+    fond();
+    pdf.setFillColor(...C.or); pdf.roundedRect(M, 15, 11, 11, 2.5, 2.5, "F");
+    ecrire(M + 5.5, 22.6, "€", 13, C.noir, true, "center");
+    ecrire(M + 15, 22.4, "MES COMPTES", 8.5, C.orClair, true);
+    ecrire(D, 22.4, `Exporté le ${deux(t.getDate())}/${deux(t.getMonth() + 1)}/${t.getFullYear()} à ${deux(t.getHours())}:${deux(t.getMinutes())}`,
+      8, C.grisFonce, false, "right");
+    ecrire(M, 42, "Remboursements", 26, C.blanc, true);
+    ecrire(M, 50, (mois ? nomMois(mois) : "Tous les mois") + (qui ? ` · ${qui}` : ""), 11, C.gris);
+    trait(C.or, 0.35, M, 56, D, 56);
+
+    // Carte récapitulative
+    let y = 63;
+    pdf.setFillColor(...C.carte); pdf.setDrawColor(...C.or); pdf.setLineWidth(0.35);
+    pdf.roundedRect(M, y, D - M, 36, 3, 3, "FD");
+    ecrire(M + 8, y + 11, "RESTE À ME REMBOURSER", 8, C.or, true);
+    ecrire(M + 8, y + 27, euro(attente), 28, C.orClair, true);
+    trait(C.trait, 0.2, M + 112, y + 7, M + 112, y + 29);
+    ecrire(M + 120, y + 11, "Déjà remboursé", 8, C.gris);
+    ecrire(M + 120, y + 17.5, euro(recu), 12, C.vert, true);
+    ecrire(M + 120, y + 25, "Total avancé", 8, C.gris);
+    ecrire(M + 120, y + 31.5, euro(attente + recu), 12, C.blanc, true);
+    y += 48;
+
+    // Une section par mois, du plus récent au plus ancien
     const parMois = new Map();
     rows.forEach((r) => { if (!parMois.has(r.mois)) parMois.set(r.mois, []); parMois.get(r.mois).push(r); });
-    for (const [m, items] of parMois) {
-      y = tableau(pdf, y, `${nomMois(m)} - Total : ${euro(somme(items))} | En attente : ${euro(somme(items.filter((r) => r.a_rembourser === 1)))}`,
-        ["Élément", "Date", "Montant", "Statut"], [90, 30, 30, 30],
-        items.map((r) => ({ cellules: [r.element, dateFr(r.date_echeance), euro(r.montant), r.a_rembourser === 2 ? "Remboursé" : "En attente"],
-          gras: 2, couleurs: { 3: r.a_rembourser === 2 ? [100, 150, 100] : [180, 120, 40] } })),
-        ["TOTAL DU MOIS", euro(somme(items))]);
+    const titreMois = (y, m, items, suite = false) => {
+      const enAttente = somme(items.filter((r) => r.a_rembourser === 1)), n = items.length;
+      ecrire(M, y + 6, nomMois(m) + (suite ? " (suite)" : ""), 13, C.or, true);
+      ecrire(D, y + 6, `${n} dépense${n > 1 ? "s" : ""} · ` + (enAttente ? `${euro(enAttente)} en attente` : "tout est remboursé"),
+        8.5, C.gris, false, "right");
+      trait(C.trait, 0.2, M, y + 9.5, D, y + 9.5);
+      return y + 12;
+    };
+    for (const m of [...parMois.keys()].sort().reverse()) {
+      const items = parMois.get(m);
+      if (y + 32 > BAS) { nouvellePage(); y = 20; }
+      y = titreMois(y, m, items);
+      for (const r of items) {
+        if (y + 8 > BAS) { nouvellePage(); y = titreMois(20, m, items, true); }
+        const rembourse = r.a_rembourser === 2, texte = rembourse ? C.grisFonce : C.blanc;
+        pdf.setFillColor(...(rembourse ? C.vert : C.or)); pdf.rect(M, y + 1.5, 0.9, 5, "F");
+        ecrire(M + 4, y + 5.4, String(r.element || "").slice(0, 48), 9.5, texte);
+        ecrire(M + 100, y + 5.4, dateFr(r.date_echeance), 8.5, C.gris);
+        pdf.setFillColor(...(rembourse ? [17, 38, 27] : [40, 33, 20])); pdf.roundedRect(M + 128, y + 1.3, 24, 5.4, 2.7, 2.7, "F");
+        ecrire(M + 140, y + 5.1, rembourse ? "Remboursé" : "En attente", 7.5, rembourse ? C.vert : C.or, true, "center");
+        ecrire(D, y + 5.4, euro(r.montant), 9.5, texte, true, "right");
+        trait(C.ligne, 0.2, M + 4, y + 8, D, y + 8);
+        y += 8;
+      }
+      if (y + 10 > BAS) { nouvellePage(); y = 20; }
+      ecrire(D - 32, y + 6, "Total du mois", 8.5, C.gris, false, "right");
+      ecrire(D, y + 6, euro(somme(items)), 10.5, C.orClair, true, "right");
+      y += 16;
+    }
+    if (!rows.length) ecrire(M, y + 6, "Aucun remboursement à afficher.", 10, C.gris);
+
+    // Pied de page, une fois le nombre de pages connu
+    const n = pdf.getNumberOfPages();
+    for (let i = 1; i <= n; i++) {
+      pdf.setPage(i);
+      trait(C.trait, 0.2, M, 284, D, 284);
+      ecrire(M, 289, `Mes Comptes · Page ${i} / ${n}`, 7.5, C.grisFonce);
+      ecrire(D, 289, "Remboursements", 7.5, C.grisFonce, false, "right");
     }
     return pdf.output("blob");
   }

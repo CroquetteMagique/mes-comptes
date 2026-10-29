@@ -1,5 +1,14 @@
 [
   {
+    "id": "2026-10-29.1",
+    "titre": "Nouveau PDF des remboursements",
+    "points": [
+      "Le PDF des remboursements reprend le style de l'appli : noir, blanc et or.",
+      "Le montant qui reste à vous rembourser est mis en avant, avec une section par mois.",
+      "Les mois et les montants sont maintenant écrits en français (« Octobre 2026 », « 1 234,56 € »)."
+    ]
+  },
+  {
     "id": "2026-10-28.5",
     "titre": "Sécurité renforcée",
     "points": [
