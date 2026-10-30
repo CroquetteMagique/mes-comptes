@@ -970,7 +970,10 @@ def export_pdf_remboursements(mois_filtre=None):
     ecrire(M + 15, 22.4, "MES COMPTES", 8.5, OR_CLAIR, True)
     ecrire(D, 22.4, f"Exporté le {maintenant:%d/%m/%Y} à {maintenant:%H:%M}", 8, GRIS_FONCE, align="R")
     ecrire(M, 42, "Remboursements", 26, BLANC, True)
-    ecrire(M, 50, (_nom_mois(mois_filtre) if mois_filtre else "Tous les mois") + (f" · {personne}" if personne else ""), 11, GRIS)
+    ecrire(M, 50, _nom_mois(mois_filtre) if mois_filtre else "Tous les mois", 11, GRIS)
+    if personne:                      # PDF d'une personne : son nom bien visible
+        ecrire(D, 38, "DOIT REMBOURSER", 8, OR, True, "R")
+        ecrire(D, 47, personne[:24], 18, OR_CLAIR, True, "R")
     trait(OR, 0.35, M, 56, D, 56)
 
     # ── Carte récapitulative
@@ -988,7 +991,7 @@ def export_pdf_remboursements(mois_filtre=None):
     ecrire(M + 120, y + 31.5, _euro(total_global), 12, BLANC, True)
     y += 48
 
-    # ── Une section par mois, du plus récent au plus ancien
+    # ── Une section par mois, du plus récent au plus ancien ; dans le mois, une par personne
     par_mois = {}
     for r in rows:
         par_mois.setdefault(r["mois"], []).append(r)
@@ -1001,34 +1004,65 @@ def export_pdf_remboursements(mois_filtre=None):
         trait(TRAIT, 0.2, M, y + 9.5, D, y + 9.5)
         return y + 12
 
+    def titre_personne(y, nom, items, suite=False):
+        n = len(items)
+        ecrire(M + 4, y + 6, nom + (" (suite)" if suite else ""), 11, BLANC, True)
+        ecrire(D, y + 6, f"{n} dépense{'s' if n > 1 else ''}", 8.5, GRIS, align="R")
+        return y + 9
+
+    def ligne(y, r):
+        rembourse = r["a_rembourser"] == 2
+        texte = GRIS_FONCE if rembourse else BLANC
+        pdf.set_fill_color(*(VERT if rembourse else OR))
+        pdf.rect(M, y + 1.5, 0.9, 5, "F")
+        ecrire(M + 4, y + 5.4, str(r["element"] or "")[:48], 9.5, texte)
+        ecrire(M + 100, y + 5.4, _date_fr(r["date_echeance"]), 8.5, GRIS)
+        pdf.set_fill_color(*((17, 38, 27) if rembourse else (40, 33, 20)))
+        pdf.rect(M + 128, y + 1.3, 24, 5.4, "F", round_corners=True, corner_radius=2.6)
+        ecrire(M + 140, y + 5.1, "Remboursé" if rembourse else "En attente", 7.5, VERT if rembourse else OR, True, "C")
+        ecrire(D, y + 5.4, _euro(r["montant"]), 9.5, texte, True, "R")
+        trait(LIGNE, 0.2, M + 4, y + 8, D, y + 8)
+        return y + 8
+
     for mois in sorted(par_mois, reverse=True):
         items = par_mois[mois]
         if y + 32 > BAS:
             pdf.add_page()
             y = 20
         y = titre_mois(y, mois, items)
+        # par personne (ordre alphabétique, « Sans nom » à la fin) ; inutile dans le PDF d'une personne
+        groupes = {}
         for r in items:
-            if y + 8 > BAS:
-                pdf.add_page()
-                y = titre_mois(20, mois, items, suite=True)
-            rembourse = r["a_rembourser"] == 2
-            texte = GRIS_FONCE if rembourse else BLANC
-            pdf.set_fill_color(*(VERT if rembourse else OR))
-            pdf.rect(M, y + 1.5, 0.9, 5, "F")
-            ecrire(M + 4, y + 5.4, str(r["element"] or "")[:48], 9.5, texte)
-            ecrire(M + 100, y + 5.4, _date_fr(r["date_echeance"]), 8.5, GRIS)
-            pdf.set_fill_color(*((17, 38, 27) if rembourse else (40, 33, 20)))
-            pdf.rect(M + 128, y + 1.3, 24, 5.4, "F", round_corners=True, corner_radius=2.6)
-            ecrire(M + 140, y + 5.1, "Remboursé" if rembourse else "En attente", 7.5, VERT if rembourse else OR, True, "C")
-            ecrire(D, y + 5.4, _euro(r["montant"]), 9.5, texte, True, "R")
-            trait(LIGNE, 0.2, M + 4, y + 8, D, y + 8)
-            y += 8
+            groupes.setdefault(r["personne"] or "", []).append(r)
+        noms = [""] if personne else sorted((g for g in groupes if g), key=str.lower) + ([""] if "" in groupes else [])
+        for nom in noms:
+            lignes = items if personne else groupes[nom]
+            if not personne:
+                if y + 26 > BAS:
+                    pdf.add_page()
+                    y = titre_mois(20, mois, items, suite=True)
+                y = titre_personne(y, nom or "Sans nom", lignes)
+            for r in lignes:
+                if y + 8 > BAS:
+                    pdf.add_page()
+                    y = titre_mois(20, mois, items, suite=True)
+                    if not personne:
+                        y = titre_personne(y, nom or "Sans nom", lignes, suite=True)
+                y = ligne(y, r)
+            if not personne:          # total de la personne
+                if y + 9 > BAS:
+                    pdf.add_page()
+                    y = 20
+                ecrire(D - 32, y + 5.5, f"Total {nom or 'sans nom'}"[:40], 8.5, GRIS, align="R")
+                ecrire(D, y + 5.5, _euro(sum(r["montant"] for r in lignes)), 9.5, BLANC, True, "R")
+                y += 10
         if y + 10 > BAS:
             pdf.add_page()
             y = 20
-        ecrire(D - 32, y + 6, "Total du mois", 8.5, GRIS, align="R")
-        ecrire(D, y + 6, _euro(sum(r["montant"] for r in items)), 10.5, OR_CLAIR, True, "R")
-        y += 16
+        trait(OR, 0.3, D - 70, y + 1, D, y + 1)
+        ecrire(D - 32, y + 7, "Total du mois", 8.5, GRIS, align="R")
+        ecrire(D, y + 7, _euro(sum(r["montant"] for r in items)), 10.5, OR_CLAIR, True, "R")
+        y += 17
 
     if not rows:
         ecrire(M, y + 6, "Aucun remboursement à afficher.", 10, GRIS)

@@ -329,7 +329,7 @@ nav { display: flex; flex-direction: column; gap: 2px; }
   vertical-align: middle;
 }
 .table tbody tr:last-child td { border-bottom: 0; }
-.table tbody tr:not(.empty-row):hover td { background: var(--surface2); }
+.table tbody tr:not(.empty-row):not(.rembours-personne):hover td { background: var(--surface2); }
 .table th.num,
 .table td.amount { text-align: right; }
 .table td.amount { font-weight: 700; white-space: nowrap; }
@@ -402,6 +402,12 @@ nav { display: flex; flex-direction: column; gap: 2px; }
 .rembours-mois-attente { color: var(--gold); font-weight: 600; }
 .rembours-mois-actions { display: flex; align-items: center; gap: .5rem; }
 .rembours-mois-total { font-size: 1.15rem; margin-right: .5rem; white-space: nowrap; }
+/* Dans un mois : une ligne d'en-tête par personne qui doit rembourser */
+.table tr.rembours-personne td { background: var(--bg); padding: .65rem 1.25rem; border-bottom: 1px solid var(--border); }
+.rembours-personne-ligne { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .75rem; }
+.rembours-personne-nom { font-weight: 700; color: var(--text); }
+.rembours-personne-resume { font-size: .8rem; color: var(--text-3); }
+.rembours-personne-total { margin-left: auto; margin-right: .25rem; white-space: nowrap; }
 .row-rembourse td { color: var(--text-3); }
 .row-rembourse td:first-child { text-decoration: line-through; }
 
@@ -640,6 +646,7 @@ nav { display: flex; flex-direction: column; gap: 2px; }
   .table td:last-child:not(.amount):not(:first-child) { margin-left: auto; }
   .table .type-tag { display: block; margin: 0; }
   .empty-row td { flex: 1 1 100%; padding: 1.25rem 0 !important; }
+  .table tr.rembours-personne td { flex: 1 1 100%; padding: 0; color: var(--text); }
   .totaux-item + .totaux-item { border-left: 0; border-top: 1px solid var(--border); }
   .totaux-item { flex-basis: 100%; }
   .toolbar .btn-primary, .toolbar .btn-secondary { flex: 1 1 auto; }
@@ -935,11 +942,14 @@ button.logo-text:hover { filter: brightness(1.15); }
   color: var(--text-3); font-size: .8rem; text-align: left;
 }
 .lien-notes:hover { color: var(--ink); }
+/* Numéro de version, séparé du choix du mois par un trait comme les autres sections */
+.version-app { margin-top: .9rem; padding-top: .7rem; border-top: 1px solid var(--border); }
+.version-app .lien-notes { margin-top: 0; font-weight: 600; letter-spacing: .02em; }
 .notes-liste { display: grid; gap: 1.1rem; max-height: 55vh; overflow-y: auto; }
 .note h3 { font-size: 1rem; font-weight: 700; color: var(--gold-hi); margin-bottom: .4rem; }
 .note h3 span { font-weight: 500; font-size: .8rem; color: var(--text-3); margin-left: .35rem; }
 .note ul { padding-left: 1.1rem; display: grid; gap: .35rem; color: var(--text-2); }
-@media (max-width: 860px) { .lien-notes { display: none; } }
+@media (max-width: 860px) { .lien-notes, .version-app { display: none; } }
 
 /* Version navigateur : sauvegarde / restauration */
 .liens-local { margin-top: .6rem; }

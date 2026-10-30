@@ -367,7 +367,11 @@
     ecrire(D, 22.4, `Exporté le ${deux(t.getDate())}/${deux(t.getMonth() + 1)}/${t.getFullYear()} à ${deux(t.getHours())}:${deux(t.getMinutes())}`,
       8, C.grisFonce, false, "right");
     ecrire(M, 42, "Remboursements", 26, C.blanc, true);
-    ecrire(M, 50, (mois ? nomMois(mois) : "Tous les mois") + (qui ? ` · ${qui}` : ""), 11, C.gris);
+    ecrire(M, 50, mois ? nomMois(mois) : "Tous les mois", 11, C.gris);
+    if (qui) {                                      // PDF d'une personne : son nom bien visible
+      ecrire(D, 38, "DOIT REMBOURSER", 8, C.or, true, "right");
+      ecrire(D, 47, qui.slice(0, 24), 18, C.orClair, true, "right");
+    }
     trait(C.or, 0.35, M, 56, D, 56);
 
     // Carte récapitulative
@@ -383,7 +387,7 @@
     ecrire(M + 120, y + 31.5, euro(attente + recu), 12, C.blanc, true);
     y += 48;
 
-    // Une section par mois, du plus récent au plus ancien
+    // Une section par mois, du plus récent au plus ancien ; dans le mois, une par personne
     const parMois = new Map();
     rows.forEach((r) => { if (!parMois.has(r.mois)) parMois.set(r.mois, []); parMois.get(r.mois).push(r); });
     const titreMois = (y, m, items, suite = false) => {
@@ -394,26 +398,57 @@
       trait(C.trait, 0.2, M, y + 9.5, D, y + 9.5);
       return y + 12;
     };
+    const titrePersonne = (y, nom, items, suite = false) => {
+      ecrire(M + 4, y + 6, nom + (suite ? " (suite)" : ""), 11, C.blanc, true);
+      ecrire(D, y + 6, `${items.length} dépense${items.length > 1 ? "s" : ""}`, 8.5, C.gris, false, "right");
+      return y + 9;
+    };
+    const ligne = (y, r) => {
+      const rembourse = r.a_rembourser === 2, texte = rembourse ? C.grisFonce : C.blanc;
+      pdf.setFillColor(...(rembourse ? C.vert : C.or)); pdf.rect(M, y + 1.5, 0.9, 5, "F");
+      ecrire(M + 4, y + 5.4, String(r.element || "").slice(0, 48), 9.5, texte);
+      ecrire(M + 100, y + 5.4, dateFr(r.date_echeance), 8.5, C.gris);
+      pdf.setFillColor(...(rembourse ? [17, 38, 27] : [40, 33, 20])); pdf.roundedRect(M + 128, y + 1.3, 24, 5.4, 2.6, 2.6, "F");
+      ecrire(M + 140, y + 5.1, rembourse ? "Remboursé" : "En attente", 7.5, rembourse ? C.vert : C.or, true, "center");
+      ecrire(D, y + 5.4, euro(r.montant), 9.5, texte, true, "right");
+      trait(C.ligne, 0.2, M + 4, y + 8, D, y + 8);
+      return y + 8;
+    };
     for (const m of [...parMois.keys()].sort().reverse()) {
       const items = parMois.get(m);
       if (y + 32 > BAS) { nouvellePage(); y = 20; }
       y = titreMois(y, m, items);
-      for (const r of items) {
-        if (y + 8 > BAS) { nouvellePage(); y = titreMois(20, m, items, true); }
-        const rembourse = r.a_rembourser === 2, texte = rembourse ? C.grisFonce : C.blanc;
-        pdf.setFillColor(...(rembourse ? C.vert : C.or)); pdf.rect(M, y + 1.5, 0.9, 5, "F");
-        ecrire(M + 4, y + 5.4, String(r.element || "").slice(0, 48), 9.5, texte);
-        ecrire(M + 100, y + 5.4, dateFr(r.date_echeance), 8.5, C.gris);
-        pdf.setFillColor(...(rembourse ? [17, 38, 27] : [40, 33, 20])); pdf.roundedRect(M + 128, y + 1.3, 24, 5.4, 2.7, 2.7, "F");
-        ecrire(M + 140, y + 5.1, rembourse ? "Remboursé" : "En attente", 7.5, rembourse ? C.vert : C.or, true, "center");
-        ecrire(D, y + 5.4, euro(r.montant), 9.5, texte, true, "right");
-        trait(C.ligne, 0.2, M + 4, y + 8, D, y + 8);
-        y += 8;
+      // par personne (ordre alphabétique, « Sans nom » à la fin) ; inutile dans le PDF d'une personne
+      const groupes = new Map();
+      items.forEach((r) => { const k = r.personne || ""; if (!groupes.has(k)) groupes.set(k, []); groupes.get(k).push(r); });
+      const noms = qui ? [""] : [...groupes.keys()].filter(Boolean)
+        .sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0))
+        .concat(groupes.has("") ? [""] : []);
+      for (const nom of noms) {
+        const lignes = qui ? items : groupes.get(nom);
+        if (!qui) {
+          if (y + 26 > BAS) { nouvellePage(); y = titreMois(20, m, items, true); }
+          y = titrePersonne(y, nom || "Sans nom", lignes);
+        }
+        for (const r of lignes) {
+          if (y + 8 > BAS) {
+            nouvellePage(); y = titreMois(20, m, items, true);
+            if (!qui) y = titrePersonne(y, nom || "Sans nom", lignes, true);
+          }
+          y = ligne(y, r);
+        }
+        if (!qui) {                                 // total de la personne
+          if (y + 9 > BAS) { nouvellePage(); y = 20; }
+          ecrire(D - 32, y + 5.5, `Total ${nom || "sans nom"}`.slice(0, 40), 8.5, C.gris, false, "right");
+          ecrire(D, y + 5.5, euro(somme(lignes)), 9.5, C.blanc, true, "right");
+          y += 10;
+        }
       }
       if (y + 10 > BAS) { nouvellePage(); y = 20; }
-      ecrire(D - 32, y + 6, "Total du mois", 8.5, C.gris, false, "right");
-      ecrire(D, y + 6, euro(somme(items)), 10.5, C.orClair, true, "right");
-      y += 16;
+      trait(C.or, 0.3, D - 70, y + 1, D, y + 1);
+      ecrire(D - 32, y + 7, "Total du mois", 8.5, C.gris, false, "right");
+      ecrire(D, y + 7, euro(somme(items)), 10.5, C.orClair, true, "right");
+      y += 17;
     }
     if (!rows.length) ecrire(M, y + 6, "Aucun remboursement à afficher.", 10, C.gris);
 

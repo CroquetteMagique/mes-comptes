@@ -504,8 +504,8 @@ function downloadPDF() {
 
 // Filtre « personne » de l'onglet Remboursements, appliqué aux PDF et au partage
 const personneChoisie = () => document.getElementById("rembours-personne").value;
-function urlRemboursements(mois) {
-  const p = personneChoisie();
+function urlRemboursements(mois, personne) {
+  const p = personne === undefined ? personneChoisie() : personne;
   return (mois ? `/api/export/pdf/remboursements/${mois}` : "/api/export/pdf/remboursements")
     + (p ? `?personne=${encodeURIComponent(p)}` : "");
 }
@@ -514,16 +514,17 @@ function downloadPDFRemboursements() {
   telecharger(urlRemboursements());
 }
 
-function downloadPDFRemboursementsMois(mois) {
-  telecharger(urlRemboursements(mois));
+// personne : PDF d'une seule personne (bouton de sa ligne) ; sinon le filtre de l'onglet
+function downloadPDFRemboursementsMois(mois, personne) {
+  telecharger(urlRemboursements(mois, personne));
 }
 
 // Partage du PDF : ouvre le menu "Partager" de Windows/Mac (choisir WhatsApp puis le contact).
 // WhatsApp ne permet pas d'envoyer un fichier par lien : sans menu Partager,
 // on télécharge le PDF et on ouvre WhatsApp pour le joindre à la main.
-async function sharePDFRemboursements(mois) {
-  const p       = personneChoisie();
-  const fichier = await recupererFichier(urlRemboursements(mois));
+async function sharePDFRemboursements(mois, personne) {
+  const p       = personne === undefined ? personneChoisie() : personne;
+  const fichier = await recupererFichier(urlRemboursements(mois, p));
   const file    = new File([fichier.blob], fichier.nom, { type: "application/pdf" });
   const text = `Remboursements ${mois ? formatMoisLabel(mois) : ""}${p ? " pour " + p : ""}`.replace(/\s+/g, " ").trim();
 
@@ -804,23 +805,46 @@ function renderRemboursements() {
     const action = rembourse ? "Marquer en attente" : "Marquer comme remboursé";
     return `
       <tr class="${rembourse ? "row-rembourse" : ""}">
-        <td>${esc(d.element)}${d.personne ? ` <span class="type-tag">${esc(d.personne)}</span>` : ""}</td>
+        <td>${esc(d.element)}</td>
         <td>${fmtDate(d.date_echeance)}</td>
         <td class="amount">${fmt(d.montant)}</td>
         <td><span class="badge ${rembourse ? "badge-green" : "badge-orange"}">${rembourse ? "Remboursé" : "En attente"}</span></td>
         <td><button class="btn-icon ${rembourse ? "" : "btn-icon--ok"}" title="${action}" aria-label="${action}" onclick="toggleRembourse(${Number(d.id)})">${icon(rembourse ? "undo" : "check")}</button></td>
       </tr>`;
   };
+  const somme = (rows) => rows.reduce((s, d) => s + d.montant, 0);
+  const resume = (rows) => {
+    const att = somme(rows.filter((d) => d.a_rembourser === 1));
+    return `${rows.length} dépense${rows.length > 1 ? "s" : ""} · `
+      + (att ? `<span class="rembours-mois-attente">${fmt(att)} en attente</span>` : "tout est remboursé");
+  };
+  // Dans un mois : une ligne d'en-tête par personne (ordre alphabétique, « Sans nom » à la fin)
+  const parPersonne = (mois, items) => {
+    const groupes = new Map();
+    items.forEach((d) => { const k = d.personne || ""; if (!groupes.has(k)) groupes.set(k, []); groupes.get(k).push(d); });
+    const noms = [...groupes.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b, "fr")).concat(groupes.has("") ? [""] : []);
+    const m = esc(JSON.stringify(mois));
+    return noms.map((nom) => {
+      const rows = groupes.get(nom), n = esc(JSON.stringify(nom));
+      return `
+      <tr class="rembours-personne"><td colspan="5"><div class="rembours-personne-ligne">
+        <span class="rembours-personne-nom">${nom ? esc(nom) : "Sans nom"}</span>
+        <span class="rembours-personne-resume">${resume(rows)}</span>
+        <strong class="rembours-personne-total">${fmt(somme(rows))}</strong>
+        ${nom ? `<button class="btn-pdf btn-pdf--sm" onclick="downloadPDFRemboursementsMois(${m}, ${n})" title="PDF pour ${esc(nom)}" aria-label="PDF pour ${esc(nom)}">${icon("download")} PDF</button>
+        <button class="btn-pdf btn-pdf--sm btn-pdf--share" onclick="sharePDFRemboursements(${m}, ${n})" title="Envoyer à ${esc(nom)} par WhatsApp" aria-label="Envoyer à ${esc(nom)} par WhatsApp">${icon("share")}</button>` : ""}
+      </div></td></tr>${rows.map(ligne).join("")}`;
+    }).join("");
+  };
   liste.innerHTML = Object.keys(parMois).sort((a, b) => b.localeCompare(a)).map((mois) => {
     const items = parMois[mois];
-    const enAttente = items.filter((d) => d.a_rembourser === 1).reduce((s, d) => s + d.montant, 0);
-    const total = items.reduce((s, d) => s + d.montant, 0);
+    const enAttente = somme(items.filter((d) => d.a_rembourser === 1)), total = somme(items);
     return `
     <article class="table-wrap rembours-mois${enAttente ? "" : " rembours-mois--solde"}">
       <header class="rembours-mois-head">
         <div>
           <h3 class="rembours-mois-titre">${formatMoisLabel(mois)}</h3>
-          <p class="rembours-mois-resume">${items.length} dépense${items.length > 1 ? "s" : ""} · ${enAttente ? `<span class="rembours-mois-attente">${fmt(enAttente)} en attente</span>` : "tout est remboursé"}</p>
+          <p class="rembours-mois-resume">${resume(items)}</p>
         </div>
         <div class="rembours-mois-actions">
           <strong class="rembours-mois-total">${fmt(total)}</strong>
@@ -828,7 +852,7 @@ function renderRemboursements() {
           <button class="btn-pdf btn-pdf--sm btn-pdf--share" onclick="sharePDFRemboursements(${esc(JSON.stringify(mois))})" title="Envoyer par WhatsApp" aria-label="Envoyer par WhatsApp">${icon("share")}</button>
         </div>
       </header>
-      <table class="table"><tbody>${items.map(ligne).join("")}</tbody></table>
+      <table class="table"><tbody>${parPersonne(mois, items)}</tbody></table>
     </article>`;
   }).join("");
 }
@@ -1233,12 +1257,14 @@ if (window.MesComptesAuto) {
 
 let notesData = null;
 const dateVersion = (id) => { const [a, m, j] = id.split(".")[0].split("-"); return `${j}/${m}/${a}`; };
+// « V1.7 · 30/10/2026 » ; les notes sans numéro gardent la date seule
+const libelleVersion = (n) => (n.version ? `${n.version} · ` : "") + dateVersion(n.id);
 
 function afficherNotes(notes, sousTitre) {
   document.getElementById("notes-sub").textContent = sousTitre;
   document.getElementById("notes-liste").innerHTML = notes.map((n) => `
     <section class="note">
-      <h3>${esc(n.titre)} <span>${dateVersion(n.id)}</span></h3>
+      <h3>${esc(n.titre)} <span>${esc(libelleVersion(n))}</span></h3>
       <ul>${n.points.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>
     </section>`).join("");
   openModal("modal-notes");
@@ -1246,7 +1272,8 @@ function afficherNotes(notes, sousTitre) {
 
 async function chargerNotes() {
   notesData = await fetch("/api/notes").then((r) => r.json());
-  if (notesData.version) document.getElementById("version-app").textContent = `(${dateVersion(notesData.version)})`;
+  const derniere = notesData.toutes[0];
+  if (derniere) document.getElementById("version-app").textContent = derniere.version || `Nouveautés (${dateVersion(derniere.id)})`;
   if (notesData.nouvelles.length) afficherNotes(notesData.nouvelles, "L'application vient d'être mise à jour.");
   // Version navigateur : sauvegarde automatique (fichier choisi, ou téléchargement à l'ouverture)
   const s = notesData.sauvegarde;
